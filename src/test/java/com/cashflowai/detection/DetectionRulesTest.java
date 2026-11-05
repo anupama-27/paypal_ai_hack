@@ -4,6 +4,7 @@ import com.cashflowai.domain.Enums.CaseType;
 import com.cashflowai.domain.Enums.InvoiceStatus;
 import com.cashflowai.domain.Invoice;
 import com.cashflowai.domain.Payment;
+import com.cashflowai.domain.PaymentPromise;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -49,6 +50,27 @@ class DetectionRulesTest {
     void notYetDueIsFine() {
         assertEquals(Optional.empty(),
                 DetectionRules.classify(invoice("950", -10), List.of(), List.of(), TODAY));
+    }
+
+    @Test
+    void missedPromiseIsABrokenPromise() {
+        PaymentPromise missed = new PaymentPromise(1L, new BigDecimal("600"), TODAY.minusDays(1), "PORTAL");
+        assertEquals(Optional.of(CaseType.BROKEN_PROMISE),
+                DetectionRules.classify(invoice("1200", 8), List.of(), List.of(), List.of(missed), TODAY));
+    }
+
+    @Test
+    void promiseNotYetDueIsRespected() {
+        PaymentPromise upcoming = new PaymentPromise(1L, new BigDecimal("600"), TODAY.plusDays(3), "PORTAL");
+        assertEquals(Optional.empty(),
+                DetectionRules.classify(invoice("1200", 8), List.of(), List.of(), List.of(upcoming), TODAY));
+    }
+
+    @Test
+    void disputedInvoicesAreLeftToHumans() {
+        Invoice disputed = invoice("1200", 30);
+        disputed.setStatus(InvoiceStatus.DISPUTED);
+        assertEquals(Optional.empty(), DetectionRules.classify(disputed, List.of(), List.of(), TODAY));
     }
 
     @Test

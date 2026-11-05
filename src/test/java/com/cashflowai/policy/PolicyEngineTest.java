@@ -2,6 +2,7 @@ package com.cashflowai.policy;
 
 import com.cashflowai.policy.PolicyEngine.Context;
 import com.cashflowai.policy.PolicyEngine.Outcome;
+import com.cashflowai.policy.PolicyEngine.PaidCheck;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -32,10 +33,38 @@ class PolicyEngineTest {
     }
 
     @Test
-    void financialChangesAlwaysNeedApproval() {
+    void financialChangesNeedApprovalAndDiscountsAreBlocked() {
         for (ActionType t : new ActionType[]{ActionType.UPDATE_REFERENCE, ActionType.CHANGE_AMOUNT,
-                ActionType.GIVE_DISCOUNT, ActionType.ISSUE_REFUND, ActionType.WRITE_OFF}) {
+                ActionType.ISSUE_REFUND, ActionType.WRITE_OFF}) {
             assertEquals(Outcome.NEEDS_APPROVAL, policy.evaluate(t, Context.of(1)).outcome(), t.name());
         }
+        assertEquals(Outcome.DENY, policy.evaluate(ActionType.GIVE_DISCOUNT, Context.of(1)).outcome());
+    }
+
+    @Test
+    void paidCheckGuardBlocksChasingUntilPaymentsWereChecked() {
+        Context notChecked = Context.of(10).withPaidCheck(PaidCheck.NOT_RUN);
+        Context paymentFound = Context.of(10).withPaidCheck(PaidCheck.PAYMENT_FOUND);
+        assertEquals(Outcome.DENY, policy.evaluate(ActionType.SEND_REMINDER, notChecked).outcome());
+        assertEquals(Outcome.DENY, policy.evaluate(ActionType.RESEND_INVOICE, paymentFound).outcome());
+        assertEquals(Outcome.AUTO, policy.evaluate(ActionType.SEND_REMINDER,
+                Context.of(10).withPaidCheck(PaidCheck.NO_PAYMENT_FOUND)).outcome());
+    }
+
+    @Test
+    void disputedInvoicesAreNeverChased() {
+        assertEquals(Outcome.DENY, policy.evaluate(ActionType.SEND_REMINDER, Context.of(10).withDisputed(true)).outcome());
+        assertEquals(Outcome.DENY, policy.evaluate(ActionType.PAYMENT_PLAN, Context.of(10).withDisputed(true)).outcome());
+    }
+
+    @Test
+    void earnedAutonomyAndCustomerSuppliedPo() {
+        assertEquals(Outcome.AUTO, policy.evaluate(ActionType.UPDATE_REFERENCE, Context.of(5).withAutonomy(true)).outcome());
+        assertEquals(Outcome.AUTO, policy.evaluate(ActionType.UPDATE_REFERENCE, Context.of(5).fromCustomer()).outcome());
+        assertEquals(Outcome.AUTO, policy.evaluate(ActionType.SEND_REMINDER, Context.of(90).withAutonomy(true)).outcome());
+        Context under = new Context(5, new BigDecimal("800.00"), new BigDecimal("500.00")).withAutonomy(true);
+        Context over = new Context(5, new BigDecimal("800.00"), new BigDecimal("900.00")).withAutonomy(true);
+        assertEquals(Outcome.AUTO, policy.evaluate(ActionType.RECONCILE_PAYMENT, under).outcome());
+        assertEquals(Outcome.NEEDS_APPROVAL, policy.evaluate(ActionType.RECONCILE_PAYMENT, over).outcome());
     }
 }

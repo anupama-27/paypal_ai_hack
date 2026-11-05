@@ -3,30 +3,38 @@ package com.cashflowai.agent;
 import com.cashflowai.action.ActionService;
 import com.cashflowai.agent.AgentTools.ToolSpec;
 import com.cashflowai.detection.BalanceCalculator;
+import com.cashflowai.detection.PaymentMatcher;
 import com.cashflowai.domain.AgentAction;
 import com.cashflowai.domain.AgentActionRepository;
 import com.cashflowai.domain.ArCase;
 import com.cashflowai.domain.ArCaseRepository;
 import com.cashflowai.domain.Enums.ActionStatus;
+import com.cashflowai.domain.Enums.Actor;
 import com.cashflowai.domain.Enums.CaseStatus;
 import com.cashflowai.domain.Enums.InvoiceStatus;
 import com.cashflowai.domain.Enums.RootCause;
 import com.cashflowai.domain.Invoice;
+import com.cashflowai.domain.InvoiceMessageRepository;
 import com.cashflowai.domain.InvoiceRepository;
 import com.cashflowai.domain.Payment;
+import com.cashflowai.domain.PaymentPromiseRepository;
 import com.cashflowai.domain.PaymentRepository;
+import com.cashflowai.lifecycle.CaseLifecycleService;
 import com.cashflowai.policy.ActionType;
+import com.cashflowai.policy.AutonomyService;
 import com.cashflowai.policy.PolicyEngine;
 import com.cashflowai.policy.PolicyEngine.Decision;
+import com.cashflowai.policy.PolicyEngine.PaidCheck;
+import com.cashflowai.time.DemoClock;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +50,8 @@ public class ToolExecutor {
     public record ToolResult(Map<String, Object> output, boolean pendingApproval) {
     }
 
+    private static final Logger log = LoggerFactory.getLogger(ToolExecutor.class);
+
     private final AgentTools tools;
     private final PolicyEngine policy;
     private final ActionService actions;
@@ -50,10 +60,18 @@ public class ToolExecutor {
     private final ArCaseRepository cases;
     private final AgentActionRepository audit;
     private final ObjectMapper mapper;
+    private final PaymentMatcher matcher;
+    private final AutonomyService autonomy;
+    private final CaseLifecycleService lifecycle;
+    private final InvoiceMessageRepository messages;
+    private final PaymentPromiseRepository promises;
+    private final DemoClock clock;
 
     public ToolExecutor(AgentTools tools, PolicyEngine policy, ActionService actions,
                         InvoiceRepository invoices, PaymentRepository payments,
-                        ArCaseRepository cases, AgentActionRepository audit, ObjectMapper mapper) {
+                        ArCaseRepository cases, AgentActionRepository audit, ObjectMapper mapper,
+                        PaymentMatcher matcher, AutonomyService autonomy, CaseLifecycleService lifecycle,
+                        InvoiceMessageRepository messages, PaymentPromiseRepository promises, DemoClock clock) {
         this.tools = tools;
         this.policy = policy;
         this.actions = actions;
@@ -62,6 +80,12 @@ public class ToolExecutor {
         this.cases = cases;
         this.audit = audit;
         this.mapper = mapper;
+        this.matcher = matcher;
+        this.autonomy = autonomy;
+        this.lifecycle = lifecycle;
+        this.messages = messages;
+        this.promises = promises;
+        this.clock = clock;
     }
 
     @Transactional
@@ -77,7 +101,7 @@ public class ToolExecutor {
 
         Decision decision;
         try {
-            decision = policy.evaluate(spec.actionType(), policyContext(invoice, spec.actionType(), input));
+            decision = policy.evaluate(spec.actionType(), policyContext(caseId, invoice, spec.actionType(), input));
         } catch (IllegalArgumentException e) {
             decision = new Decision(PolicyEngine.Outcome.DENY, e.getMessage());
         }
@@ -102,9 +126,16 @@ public class ToolExecutor {
                         "reason", decision.reason()), true);
             }
             default -> {
-                Map<String, Object> out = run(arCase, invoice, toolName, input);
-                action.setStatus(ActionStatus.EXECUTED);
-                action.setExecutedAt(Instant.now());
+                Map<String, Object> out;
+                try {
+                    out = run(arCase, invoice, toolName, input);
+                    action.setStatus(ActionStatus.EXECUTED);
+                } catch (RuntimeException e) {
+                    log.warn("[case {}] {} failed: {}", caseId, toolName, e.getMessage());
+                    out = Map.of("error", "Action failed: " + e.getMessage(), "hint", "Escalate to a human");
+                    action.setStatus(ActionStatus.FAILED);
+                }
+                action.setExecutedAt(clock.now());
                 action.setToolOutput(toJson(out));
                 audit.save(action);
                 return new ToolResult(out, false);
@@ -124,32 +155,50 @@ public class ToolExecutor {
         Map<String, Object> out = run(arCase, invoice, action.getToolName(), readJson(action.getToolInput()));
         action.setStatus(ActionStatus.EXECUTED);
         action.setApprovedBy(approver);
-        action.setExecutedAt(Instant.now());
+        action.setExecutedAt(clock.now());
         action.setToolOutput(toJson(out));
+        autonomy.recordApproval(action.getActionType());
         return audit.save(action);
     }
 
     @Transactional
     public AgentAction reject(Long actionId, String approver) {
         AgentAction action = audit.findById(actionId).orElseThrow();
+        if (action.getStatus() != ActionStatus.PENDING_APPROVAL) {
+            throw new IllegalStateException("Action " + actionId + " is not waiting for approval");
+        }
         action.setStatus(ActionStatus.REJECTED);
         action.setApprovedBy(approver);
         ArCase arCase = cases.findById(action.getCaseId()).orElseThrow();
         arCase.setStatus(CaseStatus.ESCALATED);
+        autonomy.recordRejection(action.getActionType());
         return audit.save(action);
     }
 
-    private PolicyEngine.Context policyContext(Invoice invoice, ActionType type, JsonNode input) {
-        long days = BalanceCalculator.daysOverdue(invoice, LocalDate.now());
-        if (type != ActionType.RECONCILE_PAYMENT) {
-            return PolicyEngine.Context.of(days);
+    private PolicyEngine.Context policyContext(Long caseId, Invoice invoice, ActionType type, JsonNode input) {
+        long days = BalanceCalculator.daysOverdue(invoice, clock.today());
+        PolicyEngine.Context ctx = PolicyEngine.Context.of(days);
+        if (type == ActionType.RECONCILE_PAYMENT) {
+            Payment payment = candidatePayment(invoice, input);
+            BigDecimal outstanding = BalanceCalculator.outstanding(invoice, payments.findByInvoiceId(invoice.getId()));
+            ctx = new PolicyEngine.Context(days, outstanding, payment.getAmount());
         }
-        Payment payment = candidatePayment(invoice, input);
-        BigDecimal outstanding = BalanceCalculator.outstanding(invoice, payments.findByInvoiceId(invoice.getId()));
-        return new PolicyEngine.Context(days, outstanding, payment.getAmount());
+        return ctx.withPaidCheck(paidCheck(caseId))
+                .withDisputed(invoice.getStatus() == InvoiceStatus.DISPUTED)
+                .withAutonomy(autonomy.isGranted(type));
     }
 
-    /** Only unmatched payments that reference THIS invoice may be reconciled to it. */
+    /** Paid-check guard: what did the latest find_potential_payment in this case return? */
+    private PaidCheck paidCheck(Long caseId) {
+        return audit.findByCaseIdAndToolNameAndStatusOrderByCreatedAtDesc(caseId, AgentTools.FIND_POTENTIAL_PAYMENT,
+                        ActionStatus.EXECUTED).stream()
+                .findFirst()
+                .map(a -> readJson(a.getToolOutput()).path("candidates").isEmpty()
+                        ? PaidCheck.NO_PAYMENT_FOUND : PaidCheck.PAYMENT_FOUND)
+                .orElse(PaidCheck.NOT_RUN);
+    }
+
+    /** Only unmatched payments that the matcher links to THIS invoice may be reconciled to it. */
     private Payment candidatePayment(Invoice invoice, JsonNode input) {
         long paymentId;
         try {
@@ -157,12 +206,10 @@ public class ToolExecutor {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("payment_id must be a number");
         }
-        Payment payment = payments.findById(paymentId)
-                .orElseThrow(() -> new IllegalArgumentException("No payment with id " + paymentId));
-        if (payment.getInvoiceId() != null || !invoice.getInvoiceNumber().equals(payment.getInvoiceNumberHint())) {
-            throw new IllegalArgumentException("Payment " + paymentId + " is not an unmatched payment for this invoice");
-        }
-        return payment;
+        return matcher.candidate(invoice, paymentId)
+                .map(PaymentMatcher.Candidate::payment)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Payment " + paymentId + " is not an unmatched payment for this invoice"));
     }
 
     private Map<String, Object> run(ArCase arCase, Invoice invoice, String toolName, JsonNode input) {
@@ -177,35 +224,32 @@ public class ToolExecutor {
                     "currency", invoice.getCurrency());
             case AgentTools.FIND_POTENTIAL_PAYMENT -> {
                 BigDecimal outstanding = BalanceCalculator.outstanding(invoice, matched);
-                yield Map.of("candidates", payments.findByInvoiceIdIsNullAndInvoiceNumberHint(invoice.getInvoiceNumber())
-                        .stream().map(p -> {
-                            Map<String, Object> v = paymentView(p);
-                            v.put("exact_match", p.getAmount().compareTo(outstanding) == 0);
-                            return v;
-                        }).toList());
+                yield Map.of("candidates", matcher.candidates(invoice).stream().map(c -> {
+                    Map<String, Object> v = paymentView(c.payment());
+                    v.put("why_it_matches", c.reason());
+                    v.put("exact_match", c.payment().getAmount().compareTo(outstanding) == 0);
+                    return v;
+                }).toList());
             }
             case AgentTools.SEND_REMINDER -> {
                 Map<String, Object> out = actions.sendReminder(invoice, input.path("note").asText());
-                arCase.setStatus(CaseStatus.MONITORING);
+                lifecycle.monitor(arCase);
                 yield out;
             }
             case AgentTools.RESEND_INVOICE -> {
                 Map<String, Object> out = actions.resendInvoice(invoice);
-                arCase.setStatus(CaseStatus.MONITORING);
+                lifecycle.monitor(arCase);
                 yield out;
             }
             case AgentTools.UPDATE_PURCHASE_ORDER -> {
                 Map<String, Object> out = actions.updatePurchaseOrder(invoice, input.path("purchase_order").asText());
-                arCase.setStatus(CaseStatus.MONITORING);
+                lifecycle.monitor(arCase);
                 yield out;
             }
             case AgentTools.RECONCILE_PAYMENT -> {
-                Map<String, Object> out = actions.reconcilePayment(invoice, candidatePayment(invoice, input));
-                if (invoice.getStatus() == InvoiceStatus.PAID) {
-                    arCase.setStatus(CaseStatus.RESOLVED);
-                    arCase.setResolvedAt(Instant.now());
-                } else {
-                    arCase.setStatus(CaseStatus.MONITORING);
+                Map<String, Object> out = actions.reconcilePayment(invoice, candidatePayment(invoice, input), Actor.AGENT);
+                if (arCase.isActive()) {
+                    lifecycle.monitor(arCase);
                 }
                 yield out;
             }
@@ -231,10 +275,18 @@ public class ToolExecutor {
         v.put("amount", i.getAmount().toPlainString());
         v.put("currency", i.getCurrency());
         v.put("due_date", String.valueOf(i.getDueDate()));
-        v.put("days_overdue", BalanceCalculator.daysOverdue(i, LocalDate.now()));
+        v.put("days_overdue", BalanceCalculator.daysOverdue(i, clock.today()));
         v.put("status", i.getStatus().name());
         v.put("purchase_order", i.getReference() == null ? "(none)" : i.getReference());
-        v.put("latest_customer_message", i.getCustomerMessage() == null ? "(no reply from customer)" : i.getCustomerMessage());
+        List<Map<String, String>> conversation = messages.findByInvoiceIdOrderByCreatedAtAsc(i.getId()).stream()
+                .map(m -> Map.of("from", m.getAuthor().name(), "at", String.valueOf(m.getCreatedAt()),
+                        "text", m.getBody()))
+                .toList();
+        v.put("conversation", conversation.isEmpty() ? "(no messages from the customer)" : conversation);
+        v.put("promises", promises.findByInvoiceIdOrderByDueDateAsc(i.getId()).stream()
+                .map(p -> Map.of("amount", p.getAmount().toPlainString(), "due", p.getDueDate().toString(),
+                        "status", p.getStatus().name(), "source", String.valueOf(p.getSource())))
+                .toList());
         return v;
     }
 

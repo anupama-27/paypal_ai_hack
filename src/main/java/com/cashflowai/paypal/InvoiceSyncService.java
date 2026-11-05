@@ -33,6 +33,7 @@ public class InvoiceSyncService {
         String paypalId = paypal.createDraftInvoice(invoice, props.demoBuyerEmail());
         paypal.sendInvoice(paypalId);
         invoice.setPaypalInvoiceId(paypalId);
+        invoice.setPaypalPayerUrl(paypal.payerUrl(paypalId));
         if (invoice.getStatus() == InvoiceStatus.DRAFT) {
             invoice.setStatus(InvoiceStatus.SENT);
         }

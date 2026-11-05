@@ -8,5 +8,6 @@ public record PayPalProperties(
         String clientId,
         String clientSecret,
         boolean enabled,
-        String demoBuyerEmail) {
+        String demoBuyerEmail,
+        String webhookId) {
 }

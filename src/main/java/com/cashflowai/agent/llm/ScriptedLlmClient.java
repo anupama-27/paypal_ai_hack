@@ -9,7 +9,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +25,10 @@ import java.util.regex.Pattern;
 public class ScriptedLlmClient implements LlmClient {
 
     private static final Pattern PO = Pattern.compile("PO-\\d+");
+    private static final Pattern DISCOUNT = Pattern.compile("(?i)discount|\\d+\\s*%\\s*off");
+    private static final Pattern PERCENT = Pattern.compile("(\\d+)\\s*%");
+    private static final Set<String> TERMINAL = Set.of(AgentTools.SEND_REMINDER, AgentTools.RESEND_INVOICE,
+            AgentTools.UPDATE_PURCHASE_ORDER, AgentTools.RECONCILE_PAYMENT, AgentTools.ESCALATE_TO_HUMAN);
 
     private final ObjectMapper mapper;
 
@@ -32,64 +39,8 @@ public class ScriptedLlmClient implements LlmClient {
     @Override
     public LlmReply send(String systemPrompt, List<ObjectNode> messages, List<ToolSpec> tools) {
         JsonNode caseInfo = parseCaseInfo(messages.get(0));
-        int step = (int) messages.stream().filter(m -> "assistant".equals(m.path("role").asText())).count();
-        JsonNode last = lastToolResult(messages);
-        String caseType = caseInfo.path("case_type").asText();
-
-        List<ToolCall> calls = new ArrayList<>();
-        switch (caseType) {
-            case "RECONCILIATION_MISMATCH" -> {
-                if (step == 0) {
-                    calls.add(call(AgentTools.FIND_POTENTIAL_PAYMENT, obj()));
-                } else if (step == 1) {
-                    JsonNode candidate = last.path("candidates").path(0);
-                    String paymentId = candidate.path("payment_id").asText();
-                    calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("PAYMENT_NOT_RECORDED", "0.97",
-                            "PayPal payment " + candidate.path("paypal_payment_id").asText() + " for "
-                                    + candidate.path("amount").asText() + " references this invoice but was never matched.",
-                            "Reconcile payment " + paymentId)));
-                    calls.add(call(AgentTools.RECONCILE_PAYMENT, obj("payment_id", paymentId)));
-                }
-            }
-            case "PARTIAL_PAYMENT" -> {
-                if (step == 0) {
-                    calls.add(call(AgentTools.CALCULATE_OUTSTANDING_BALANCE, obj()));
-                } else if (step == 1) {
-                    String outstanding = last.path("outstanding").asText();
-                    calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("PARTIAL_PAYMENT", "0.95",
-                            "Customer paid " + last.path("total_paid").asText() + " of "
-                                    + last.path("invoice_amount").asText() + ".",
-                            "Remind customer about the remaining " + outstanding)));
-                    calls.add(call(AgentTools.SEND_REMINDER, obj("note",
-                            "Thank you for your payment. A balance of " + outstanding + " "
-                                    + last.path("currency").asText() + " remains on this invoice.")));
-                }
-            }
-            default -> { // OVERDUE_INVOICE
-                if (step == 0) {
-                    calls.add(call(AgentTools.GET_INVOICE, obj()));
-                } else if (step == 1) {
-                    String message = last.path("latest_customer_message").asText();
-                    long days = last.path("days_overdue").asLong();
-                    Matcher po = PO.matcher(message);
-                    if (po.find()) {
-                        calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("MISSING_PO", "0.97",
-                                "Customer said they cannot process the invoice without " + po.group() + ".",
-                                "Add " + po.group() + " and resend")));
-                        calls.add(call(AgentTools.UPDATE_PURCHASE_ORDER, obj("purchase_order", po.group())));
-                    } else if (days > 60) {
-                        calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("LONG_OVERDUE", "0.9",
-                                days + " days overdue with no response.", "Escalate to finance team")));
-                        calls.add(call(AgentTools.ESCALATE_TO_HUMAN, obj("reason", days + " days overdue, no customer response")));
-                    } else {
-                        calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("NO_RESPONSE", "0.9",
-                                "No dispute, no invoice issue and no reply from the customer.", "Send a polite reminder")));
-                        calls.add(call(AgentTools.SEND_REMINDER, obj("note",
-                                "Friendly reminder that this invoice is " + days + " days past due.")));
-                    }
-                }
-            }
-        }
+        Map<String, JsonNode> results = toolResults(messages);
+        List<ToolCall> calls = decide(caseInfo.path("case_type").asText(), results);
 
         ObjectNode assistant = mapper.createObjectNode();
         assistant.put("role", "assistant");
@@ -122,20 +73,148 @@ public class ScriptedLlmClient implements LlmClient {
         }
     }
 
-    private JsonNode lastToolResult(List<ObjectNode> messages) {
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            for (JsonNode block : messages.get(i).path("content")) {
-                if ("tool_result".equals(block.path("type").asText())) {
-                    try {
-                        // first tool_result in the latest user message
-                        return mapper.readTree(messages.get(i).path("content").path(0).path("content").asText());
-                    } catch (Exception e) {
-                        return mapper.createObjectNode();
+    private List<ToolCall> decide(String caseType, Map<String, JsonNode> r) {
+        List<ToolCall> calls = new ArrayList<>();
+        if (TERMINAL.stream().anyMatch(r::containsKey)) {
+            return calls;
+        }
+        if (r.containsKey(AgentTools.OFFER_DISCOUNT)) {
+            calls.add(call(AgentTools.ESCALATE_TO_HUMAN, obj("reason",
+                    "Customer asked for a discount; " + r.get(AgentTools.OFFER_DISCOUNT).path("reason").asText(
+                            "the owner must decide"))));
+            return calls;
+        }
+        if (!r.containsKey(AgentTools.GET_INVOICE)) {
+            calls.add(call(AgentTools.GET_INVOICE, obj()));
+            calls.add(call(AgentTools.CALCULATE_OUTSTANDING_BALANCE, obj()));
+            calls.add(call(AgentTools.FIND_POTENTIAL_PAYMENT, obj()));
+            return calls;
+        }
+
+        JsonNode invoice = r.get(AgentTools.GET_INVOICE);
+        JsonNode balance = r.getOrDefault(AgentTools.CALCULATE_OUTSTANDING_BALANCE, mapper.createObjectNode());
+        JsonNode candidate = r.getOrDefault(AgentTools.FIND_POTENTIAL_PAYMENT, mapper.createObjectNode())
+                .path("candidates").path(0);
+        long days = invoice.path("days_overdue").asLong();
+        String outstanding = balance.path("outstanding").asText() + " " + balance.path("currency").asText("USD");
+        String customerText = latestCustomerText(invoice);
+
+        if (!candidate.isMissingNode()) {
+            calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("PAYMENT_NOT_RECORDED", "0.96",
+                    "PayPal payment " + candidate.path("paypal_payment_id").asText() + " for "
+                            + candidate.path("amount").asText() + " was never matched: "
+                            + candidate.path("why_it_matches").asText() + ".",
+                    "Reconcile the payment instead of chasing the customer")));
+            calls.add(call(AgentTools.RECONCILE_PAYMENT, obj("payment_id", candidate.path("payment_id").asText())));
+            return calls;
+        }
+
+        Matcher discount = DISCOUNT.matcher(customerText);
+        if (discount.find()) {
+            Matcher pct = PERCENT.matcher(customerText);
+            calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("DISCOUNT_REQUEST", "0.9",
+                    "Customer wrote: \"" + abbreviate(customerText) + "\"", "Ask the owner about a discount")));
+            calls.add(call(AgentTools.OFFER_DISCOUNT, obj("percent", pct.find() ? pct.group(1) : "unspecified",
+                    "reason", "Customer requested it in their message")));
+            return calls;
+        }
+
+        Matcher po = PO.matcher(customerText);
+        if (po.find() && !po.group().equals(invoice.path("purchase_order").asText())) {
+            calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("MISSING_PO", "0.97",
+                    "Customer said they cannot process the invoice without " + po.group() + ".",
+                    "Add " + po.group() + " and resend")));
+            calls.add(call(AgentTools.UPDATE_PURCHASE_ORDER, obj("purchase_order", po.group())));
+            return calls;
+        }
+
+        switch (caseType) {
+            case "BROKEN_PROMISE" -> {
+                JsonNode broken = firstWithStatus(invoice.path("promises"), "BROKEN");
+                String promise = broken.path("amount").asText() + " by " + broken.path("due").asText();
+                calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("BROKEN_PROMISE", "0.93",
+                        "Customer committed to pay " + promise + " and no payment arrived.",
+                        "Polite reminder about the missed date")));
+                calls.add(call(AgentTools.SEND_REMINDER, obj("note",
+                        "We had noted a payment of " + promise + " but have not received it yet. "
+                                + "The remaining balance is " + outstanding + ".")));
+            }
+            case "PARTIAL_PAYMENT" -> {
+                calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("PARTIAL_PAYMENT", "0.95",
+                        "Customer paid " + balance.path("total_paid").asText() + " of "
+                                + balance.path("invoice_amount").asText() + ".",
+                        "Remind customer about the remaining " + outstanding)));
+                calls.add(call(AgentTools.SEND_REMINDER, obj("note",
+                        "Thank you for your payment. A balance of " + outstanding + " remains on this invoice.")));
+            }
+            case "CUSTOMER_REQUEST" -> {
+                calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("UNKNOWN", "0.6",
+                        "Customer wrote: \"" + abbreviate(customerText) + "\"", "Owner should reply")));
+                calls.add(call(AgentTools.ESCALATE_TO_HUMAN, obj("reason", "Customer message needs a human reply")));
+            }
+            default -> {
+                if (days > 60) {
+                    calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("LONG_OVERDUE", "0.9",
+                            days + " days overdue with no response.", "Escalate to finance team")));
+                    calls.add(call(AgentTools.ESCALATE_TO_HUMAN, obj("reason", days + " days overdue, no customer response")));
+                } else {
+                    calls.add(call(AgentTools.RECORD_DIAGNOSIS, diagnosis("NO_RESPONSE", "0.9",
+                            "No matching payment, no invoice issue and no reply from the customer.",
+                            "Send a polite reminder")));
+                    calls.add(call(AgentTools.SEND_REMINDER, obj("note",
+                            "Friendly reminder that this invoice is " + days + " days past due. Balance: "
+                                    + outstanding + ".")));
+                }
+            }
+        }
+        return calls;
+    }
+
+    private static String latestCustomerText(JsonNode invoice) {
+        String text = "";
+        for (JsonNode m : invoice.path("conversation")) {
+            if (m.path("from").asText().startsWith("CUSTOMER")) {
+                text = m.path("text").asText();
+            }
+        }
+        return text;
+    }
+
+    private static JsonNode firstWithStatus(JsonNode promises, String status) {
+        for (JsonNode p : promises) {
+            if (status.equals(p.path("status").asText())) {
+                return p;
+            }
+        }
+        return promises.path(0);
+    }
+
+    private static String abbreviate(String s) {
+        return s.length() <= 160 ? s : s.substring(0, 157) + "...";
+    }
+
+    /** Latest result per tool name, pairing tool_use ids from assistant turns with tool_result blocks. */
+    private Map<String, JsonNode> toolResults(List<ObjectNode> messages) {
+        Map<String, String> nameById = new HashMap<>();
+        Map<String, JsonNode> results = new HashMap<>();
+        for (ObjectNode m : messages) {
+            for (JsonNode block : m.path("content")) {
+                String type = block.path("type").asText();
+                if ("tool_use".equals(type)) {
+                    nameById.put(block.path("id").asText(), block.path("name").asText());
+                } else if ("tool_result".equals(type)) {
+                    String name = nameById.get(block.path("tool_use_id").asText());
+                    if (name != null) {
+                        try {
+                            results.put(name, mapper.readTree(block.path("content").asText()));
+                        } catch (Exception e) {
+                            results.put(name, mapper.createObjectNode());
+                        }
                     }
                 }
             }
         }
-        return mapper.createObjectNode();
+        return results;
     }
 
     private ToolCall call(String name, ObjectNode input) {

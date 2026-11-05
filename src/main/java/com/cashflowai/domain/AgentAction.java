@@ -1,6 +1,7 @@
 package com.cashflowai.domain;
 
 import com.cashflowai.domain.Enums.ActionStatus;
+import com.cashflowai.domain.Enums.Actor;
 import com.cashflowai.policy.ActionType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,6 +33,9 @@ public class AgentAction {
 
     @Enumerated(EnumType.STRING)
     private ActionStatus status;
+
+    @Enumerated(EnumType.STRING)
+    private Actor actor = Actor.AGENT;
 
     @Column(length = 4000)
     private String toolInput;
@@ -67,6 +71,11 @@ public class AgentAction {
     public ActionType getActionType() { return actionType; }
     public ActionStatus getStatus() { return status; }
     public void setStatus(ActionStatus status) { this.status = status; }
+    public Actor getActor() { return actor; }
+    public AgentAction by(Actor actor) {
+        this.actor = actor;
+        return this;
+    }
     public String getToolInput() { return toolInput; }
     public String getToolOutput() { return toolOutput; }
     public void setToolOutput(String toolOutput) { this.toolOutput = toolOutput; }

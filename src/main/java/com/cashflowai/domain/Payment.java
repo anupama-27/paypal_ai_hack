@@ -33,6 +33,8 @@ public class Payment {
     /** Invoice number the payer referenced, used to find candidate matches. */
     private String invoiceNumberHint;
 
+    private String payerEmail;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
@@ -55,11 +57,17 @@ public class Payment {
         this.paidAt = paidAt;
     }
 
+    public Payment withPayerEmail(String payerEmail) {
+        this.payerEmail = payerEmail;
+        return this;
+    }
+
     public Long getId() { return id; }
     public String getPaypalPaymentId() { return paypalPaymentId; }
     public Long getInvoiceId() { return invoiceId; }
     public void setInvoiceId(Long invoiceId) { this.invoiceId = invoiceId; }
     public String getInvoiceNumberHint() { return invoiceNumberHint; }
+    public String getPayerEmail() { return payerEmail; }
     public BigDecimal getAmount() { return amount; }
     public String getCurrency() { return currency; }
     public PaymentStatus getStatus() { return status; }
