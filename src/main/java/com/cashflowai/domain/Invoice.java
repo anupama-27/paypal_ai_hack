@@ -45,9 +45,13 @@ public class Invoice {
     /** Purchase order number. Maps to PayPal's detail.reference field. */
     private String reference;
 
-    /** Latest customer reply (simulated inbox for the demo). */
-    @Column(length = 2000)
-    private String customerMessage;
+    /** Secret for the customer's Fix & Pay link. */
+    @Column(unique = true)
+    private String portalToken;
+
+    /** PayPal-hosted page where the customer pays (detail.metadata.recipient_view_url). */
+    @Column(length = 1000)
+    private String paypalPayerUrl;
 
     private Instant createdAt;
     private Instant updatedAt;
@@ -69,6 +73,9 @@ public class Invoice {
     void onCreate() {
         createdAt = Instant.now();
         updatedAt = createdAt;
+        if (portalToken == null) {
+            portalToken = Tokens.random();
+        }
     }
 
     @PreUpdate
@@ -89,8 +96,9 @@ public class Invoice {
     public void setStatus(InvoiceStatus status) { this.status = status; }
     public String getReference() { return reference; }
     public void setReference(String reference) { this.reference = reference; }
-    public String getCustomerMessage() { return customerMessage; }
-    public void setCustomerMessage(String customerMessage) { this.customerMessage = customerMessage; }
+    public String getPortalToken() { return portalToken; }
+    public String getPaypalPayerUrl() { return paypalPayerUrl; }
+    public void setPaypalPayerUrl(String paypalPayerUrl) { this.paypalPayerUrl = paypalPayerUrl; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

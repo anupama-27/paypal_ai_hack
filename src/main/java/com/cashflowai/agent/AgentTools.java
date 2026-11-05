@@ -29,6 +29,7 @@ public class AgentTools {
     public static final String RECONCILE_PAYMENT = "reconcile_payment";
     public static final String ESCALATE_TO_HUMAN = "escalate_to_human";
     public static final String RECORD_DIAGNOSIS = "record_diagnosis";
+    public static final String OFFER_DISCOUNT = "offer_discount";
 
     private final List<ToolSpec> specs;
     private final Map<String, ToolSpec> byName;
@@ -38,7 +39,8 @@ public class AgentTools {
         this.specs = List.of(
                 new ToolSpec(GET_INVOICE,
                         "Get the invoice under investigation: number, customer, amount, due date, status, "
-                                + "purchase order, days overdue and the latest customer message.",
+                                + "purchase order, days overdue, the conversation with the customer (oldest first) "
+                                + "and any promises to pay or payment-plan installments.",
                         s.object(), ActionType.READ_INVOICE),
                 new ToolSpec(GET_INVOICE_PAYMENTS,
                         "List payments already matched to this invoice.",
@@ -47,7 +49,9 @@ public class AgentTools {
                         "Get invoice amount, total paid and outstanding balance. Always use this; never calculate money yourself.",
                         s.object(), ActionType.CALCULATE_BALANCE),
                 new ToolSpec(FIND_POTENTIAL_PAYMENT,
-                        "Find PayPal payments that reference this invoice but are not yet matched to it.",
+                        "Find PayPal payments not yet matched to any invoice that may belong to this one "
+                                + "(same invoice number, a typo of it, or same payer with the exact amount). "
+                                + "Required before send_reminder or resend_invoice (paid-check guard).",
                         s.object(), ActionType.FIND_POTENTIAL_PAYMENT),
                 new ToolSpec(SEND_REMINDER,
                         "Send the customer a payment reminder through PayPal with a short, polite note.",
@@ -56,7 +60,7 @@ public class AgentTools {
                         "Resend the unchanged invoice to the customer.",
                         s.object(), ActionType.RESEND_INVOICE),
                 new ToolSpec(UPDATE_PURCHASE_ORDER,
-                        "Set the purchase order (PO) number on the invoice and resend it. Requires human approval.",
+                        "Set the purchase order (PO) number on the invoice and resend it. Usually requires human approval.",
                         s.object("purchase_order", "PO number exactly as the customer provided it"),
                         ActionType.UPDATE_REFERENCE),
                 new ToolSpec(RECONCILE_PAYMENT,
@@ -65,9 +69,14 @@ public class AgentTools {
                 new ToolSpec(ESCALATE_TO_HUMAN,
                         "Hand the case to the finance team when it cannot be resolved safely.",
                         s.object("reason", "Why a human is needed"), ActionType.ESCALATE_TO_HUMAN),
+                new ToolSpec(OFFER_DISCOUNT,
+                        "Offer the customer a discount on this invoice. The owner's policy decides whether this is allowed.",
+                        s.object("percent", "Discount percentage requested",
+                                "reason", "Why the customer asked for it"), ActionType.GIVE_DISCOUNT),
                 new ToolSpec(RECORD_DIAGNOSIS,
                         "Record the root cause before finishing. root_cause must be one of: MISSING_PO, NO_RESPONSE, "
-                                + "PAYMENT_NOT_RECORDED, PARTIAL_PAYMENT, LONG_OVERDUE, UNKNOWN.",
+                                + "PAYMENT_NOT_RECORDED, PARTIAL_PAYMENT, LONG_OVERDUE, BROKEN_PROMISE, "
+                                + "CUSTOMER_CASH_FLOW, DISCOUNT_REQUEST, UNKNOWN.",
                         s.object("root_cause", "Root cause enum value",
                                 "confidence", "Number between 0 and 1",
                                 "explanation", "One or two sentences of evidence for the finance team",

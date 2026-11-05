@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.function.Consumer;
 
 /**
  * Thin wrapper over the PayPal Invoicing v2 REST API (sandbox).
@@ -107,19 +108,66 @@ public class PayPalClient {
                 .uri("/v2/invoicing/invoices/{id}", paypalInvoiceId)
                 .header(HttpHeaders.AUTHORIZATION, bearer())
                 .retrieve()
-                .body(JsonNode.class);
+                .body(ObjectNode.class);
     }
 
     /**
      * Sets the PO number (detail.reference) and re-sends the invoice to the customer.
-     * PayPal's update is a full replace, so we read the invoice, change one field and PUT it back.
      * TODO (Day 2): verify in the sandbox which read-only fields PayPal rejects on PUT.
      */
     public void updateReferenceAndResend(String paypalInvoiceId, String reference) {
-        JsonNode current = getInvoice(paypalInvoiceId);
-        ObjectNode updated = ((ObjectNode) current).deepCopy();
+        updateInvoice(paypalInvoiceId, invoice -> ((ObjectNode) invoice.path("detail")).put("reference", reference));
+    }
+
+    /** Lets the customer pay in parts on the PayPal invoice page, with a minimum first payment. */
+    public void enablePartialPayment(String paypalInvoiceId, String currency, String minimumAmountDue) {
+        updateInvoice(paypalInvoiceId, invoice -> {
+            ObjectNode partial = child(child(invoice, "configuration"), "partial_payment");
+            partial.put("allow_partial_payment", true);
+            partial.putObject("minimum_amount_due").put("currency_code", currency).put("value", minimumAmountDue);
+        });
+    }
+
+    private static ObjectNode child(ObjectNode parent, String name) {
+        return parent.get(name) instanceof ObjectNode existing ? existing : parent.putObject(name);
+    }
+
+    /** Page where the customer views and pays the invoice. */
+    public String payerUrl(String paypalInvoiceId) {
+        return getInvoice(paypalInvoiceId).path("detail").path("metadata").path("recipient_view_url").asText(null);
+    }
+
+    /**
+     * Asks PayPal whether a webhook really came from PayPal for our webhook id.
+     * https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature_post
+     */
+    public boolean verifyWebhookSignature(HttpHeaders headers, JsonNode event) {
+        if (props.webhookId() == null || props.webhookId().isBlank()) {
+            return false;
+        }
+        ObjectNode body = mapper.createObjectNode();
+        body.put("auth_algo", headers.getFirst("PAYPAL-AUTH-ALGO"));
+        body.put("cert_url", headers.getFirst("PAYPAL-CERT-URL"));
+        body.put("transmission_id", headers.getFirst("PAYPAL-TRANSMISSION-ID"));
+        body.put("transmission_sig", headers.getFirst("PAYPAL-TRANSMISSION-SIG"));
+        body.put("transmission_time", headers.getFirst("PAYPAL-TRANSMISSION-TIME"));
+        body.put("webhook_id", props.webhookId());
+        body.set("webhook_event", event);
+        JsonNode result = http.post()
+                .uri("/v1/notifications/verify-webhook-signature")
+                .header(HttpHeaders.AUTHORIZATION, bearer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(JsonNode.class);
+        return result != null && "SUCCESS".equals(result.path("verification_status").asText());
+    }
+
+    /** PayPal's update is a full replace, so read the invoice, change it, and PUT it back (notifying the customer). */
+    private void updateInvoice(String paypalInvoiceId, Consumer<ObjectNode> change) {
+        ObjectNode updated = getInvoice(paypalInvoiceId).deepCopy();
         updated.remove("links");
-        ((ObjectNode) updated.path("detail")).put("reference", reference);
+        change.accept(updated);
 
         http.put()
                 .uri("/v2/invoicing/invoices/{id}?send_to_recipient=true", paypalInvoiceId)

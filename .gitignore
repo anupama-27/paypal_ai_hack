@@ -6,6 +6,9 @@
 # Build
 target/
 *.class
+node_modules/
+frontend/dist/
+*.tsbuildinfo
 
 # IDE
 .idea/

@@ -14,6 +14,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 /** A problem CashFlow AI is working on for one invoice. */
 @Entity
@@ -42,6 +43,9 @@ public class ArCase {
     @Column(length = 4000)
     private String explanation;
 
+    /** When a MONITORING case is due for a follow-up check. */
+    private LocalDate nextCheckAt;
+
     private Instant createdAt;
     private Instant resolvedAt;
 
@@ -58,8 +62,20 @@ public class ArCase {
         createdAt = Instant.now();
     }
 
+    /** The agent can still work on it. */
     public boolean isOpen() {
         return status != CaseStatus.RESOLVED && status != CaseStatus.ESCALATED;
+    }
+
+    /** Not resolved yet: either the agent or a human still owns it. */
+    public boolean isActive() {
+        return status != CaseStatus.RESOLVED;
+    }
+
+    public void resolve(Instant at) {
+        status = CaseStatus.RESOLVED;
+        resolvedAt = at;
+        nextCheckAt = null;
     }
 
     public Long getId() { return id; }
@@ -78,4 +94,6 @@ public class ArCase {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getResolvedAt() { return resolvedAt; }
     public void setResolvedAt(Instant resolvedAt) { this.resolvedAt = resolvedAt; }
+    public LocalDate getNextCheckAt() { return nextCheckAt; }
+    public void setNextCheckAt(LocalDate nextCheckAt) { this.nextCheckAt = nextCheckAt; }
 }

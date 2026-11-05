@@ -27,8 +27,27 @@ paypal:
   enabled: ${PAYPAL_ENABLED:false}
   # Sandbox PERSONAL account email that receives demo invoices
   demo-buyer-email: ${PAYPAL_DEMO_BUYER_EMAIL:}
+  # Developer Dashboard -> your app -> Webhooks -> Webhook ID (needed to verify signatures)
+  webhook-id: ${PAYPAL_WEBHOOK_ID:}
 
 cashflow:
+  # Where the React app runs; used for Fix & Pay links in reminders
+  app-base-url: ${CASHFLOW_APP_BASE_URL:http://localhost:5173}
+  cors-origins: ${CASHFLOW_CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
+  demo:
+    # Reset / advance-time / simulate-payment endpoints. Turn off for a real deployment.
+    enabled: ${CASHFLOW_DEMO_ENABLED:true}
+  followup:
+    days: 3
+    interval-ms: 60000
+  autonomy:
+    suggest-after: 3
+  payment-plan:
+    max-installments: 2
+    max-days: 30
+    min-first-share: 0.50
+  promise:
+    max-days: 14
   agent:
     max-steps: 8
   llm:
