@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: cashflow-ai
+  # Reads KEY=value pairs from a local .env file if present (never commit it).
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:h2:mem:cashflow;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+
+paypal:
+  base-url: https://api-m.sandbox.paypal.com
+  client-id: ${PAYPAL_CLIENT_ID:}
+  client-secret: ${PAYPAL_CLIENT_SECRET:}
+  # false = PayPal calls are skipped and logged (lets you work without credentials)
+  enabled: ${PAYPAL_ENABLED:false}
+  # Sandbox PERSONAL account email that receives demo invoices
+  demo-buyer-email: ${PAYPAL_DEMO_BUYER_EMAIL:}
+
+cashflow:
+  agent:
+    max-steps: 8
+  llm:
+    # Leave the key empty to use the scripted stand-in (no AI calls, no cost).
+    api-key: ${CASHFLOW_LLM_API_KEY:}
+    # groq = any OpenAI-compatible endpoint; anthropic = Anthropic Messages API
+    provider: ${CASHFLOW_LLM_PROVIDER:groq}
+    # Check the provider's docs for the exact current model id.
+    model: ${CASHFLOW_LLM_MODEL:openai/gpt-oss-120b}
+    base-url: ${CASHFLOW_LLM_BASE_URL:https://api.groq.com/openai/v1}

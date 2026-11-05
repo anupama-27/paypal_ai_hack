@@ -1,0 +1,51 @@
+package com.cashflowai.web;
+
+import com.cashflowai.detection.BalanceCalculator;
+import com.cashflowai.domain.Invoice;
+import com.cashflowai.domain.InvoiceRepository;
+import com.cashflowai.domain.Payment;
+import com.cashflowai.domain.PaymentRepository;
+import com.cashflowai.paypal.InvoiceSyncService;
+import com.cashflowai.web.Views.InvoiceView;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/invoices")
+public class InvoiceController {
+
+    private final InvoiceRepository invoices;
+    private final PaymentRepository payments;
+    private final InvoiceSyncService sync;
+
+    public InvoiceController(InvoiceRepository invoices, PaymentRepository payments, InvoiceSyncService sync) {
+        this.invoices = invoices;
+        this.payments = payments;
+        this.sync = sync;
+    }
+
+    @GetMapping
+    public List<InvoiceView> list() {
+        return invoices.findAll().stream().map(this::view).toList();
+    }
+
+    /** Creates and sends this invoice in the PayPal sandbox. */
+    @PostMapping("/{id}/paypal-sync")
+    public InvoiceView pushToPayPal(@PathVariable Long id) {
+        return view(sync.pushToPayPal(id));
+    }
+
+    InvoiceView view(Invoice i) {
+        List<Payment> matched = payments.findByInvoiceId(i.getId());
+        return new InvoiceView(i.getId(), i.getInvoiceNumber(), i.getCustomerName(), i.getAmount(),
+                BalanceCalculator.totalPaid(matched), BalanceCalculator.outstanding(i, matched), i.getCurrency(),
+                i.getDueDate(), BalanceCalculator.daysOverdue(i, LocalDate.now()), i.getStatus().name(),
+                i.getReference(), i.getPaypalInvoiceId());
+    }
+}
