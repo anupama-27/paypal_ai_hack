@@ -1,0 +1,17 @@
+# Local PostgreSQL for CashFlow AI. Run: docker compose up -d
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cashflow
+      POSTGRES_USER: cashflow
+      POSTGRES_PASSWORD: cashflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the cashflow_test database used by mvn test
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+
+volumes:
+  pgdata:

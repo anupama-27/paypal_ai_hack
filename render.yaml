@@ -1,0 +1,71 @@
+# Render blueprint: one click deploy of the backend (Docker), managed Postgres,
+# and the React frontend as a static site. New Blueprint from this repo on render.com.
+services:
+  - type: web
+    name: cashflow-ai
+    runtime: docker
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: cashflow-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: cashflow-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: cashflow-db
+          property: database
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: cashflow-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: cashflow-db
+          property: password
+      - key: CASHFLOW_APP_BASE_URL
+        value: https://cashflow-ai-frontend.onrender.com
+      - key: CASHFLOW_CORS_ORIGINS
+        value: https://cashflow-ai-frontend.onrender.com
+      - key: CASHFLOW_DEMO_ENABLED
+        value: "true"
+      # Fill these in the Render dashboard after the blueprint is created.
+      - key: PAYPAL_ENABLED
+        value: "false"
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_DEMO_BUYER_EMAIL
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: CASHFLOW_LLM_API_KEY
+        sync: false
+      - key: CASHFLOW_LLM_PROVIDER
+        value: groq
+      - key: CASHFLOW_LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: CASHFLOW_LLM_MODEL
+        value: openai/gpt-oss-120b
+
+  - type: web
+    name: cashflow-ai-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE
+        value: https://cashflow-ai.onrender.com
+
+databases:
+  - name: cashflow-db
+    plan: free
