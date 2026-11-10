@@ -1,4 +1,4 @@
--- CashFlow AI schema (PostgreSQL; also runs on H2).
+-- CashFlow AI schema (PostgreSQL).
 -- Run manually:  psql "$DATABASE_URL" -f src/main/resources/db/schema.sql
 -- Safe to re-run: every statement is IF NOT EXISTS.
 -- Column names match Spring Boot's default naming (camelCase -> snake_case).

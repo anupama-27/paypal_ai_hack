@@ -128,6 +128,17 @@ pre.json { background: #0f172a; color: #d6e2ff; padding: 10px; border-radius: 6p
 .offer { border: 1px dashed var(--brand-2); border-radius: 8px; padding: 10px; }
 blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--brand-2); background: #f6f9ff; }
 
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .charts { grid-template-columns: 1fr; } }
+
+.timeline-page { display: flex; flex-direction: column; height: calc(100vh - 48px); }
+.timeline-wrap { flex: 1; padding: 0; overflow: hidden; }
+.legend { display: inline-flex; align-items: center; margin-right: 14px; font-weight: 600; }
+.legend::before { content: ''; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.legend-blue::before { background: #3b82f6; }
+.legend-green::before { background: #22c55e; }
+.legend-orange::before { background: #f59e0b; }
+
 .portal { max-width: 620px; margin: 32px auto; padding: 0 16px; }
 .portal-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .portal-amount { font-size: 28px; font-weight: 700; margin: 6px 0 10px; }

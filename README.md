@@ -38,23 +38,32 @@ Customer replies are simulated, and all customers are fictional.
 
 ## Run it locally
 
-Requirements: Java 21 and Maven, or IntelliJ IDEA, which has Maven built in.
+Requirements: Java 21 and Maven (or IntelliJ IDEA, which has Maven built in) and a PostgreSQL database.
 
 ```bash
 git clone https://github.com/anupama-27/paypal_hackathon.git
 cd paypal_hackathon
 cp .env.example .env        # fill in values (optional at first)
+
+# PostgreSQL — either docker:
+docker compose up -d        # creates the cashflow + cashflow_test databases
+# ...or an existing server: create a 'cashflow' database and a user that owns it,
+# then set DATABASE_URL / DATABASE_USERNAME / DATABASE_PASSWORD in .env
+
 mvn spring-boot:run
 ```
 
-It runs on `http://localhost:8080` with an in-memory H2 database and demo data.
+It runs on `http://localhost:8080` backed by PostgreSQL. `src/main/resources/db/schema.sql`
+creates the tables on startup and the demo scenarios are seeded when the tables are empty.
+Local defaults: `jdbc:postgresql://localhost:5432/cashflow`, user/password `cashflow`/`cashflow`.
 
-Then start the React app in a second terminal (Node 20+):
+Then start the React app in a second terminal (Node 22+ recommended):
 
 ```bash
 cd frontend
 npm install
 npm run dev                 # http://localhost:5173, proxies /api and /mcp to :8080
+# API_TARGET=http://localhost:8081 npm run dev   # if the backend runs on another port
 ```
 
 Open `http://localhost:5173`, click **Run agent**, then try **Demo controls** (reset, move the date forward, simulate a payment, open a customer's Fix & Pay link).
@@ -76,17 +85,12 @@ LLM settings (all in `.env`):
 | `CASHFLOW_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Use `https://api.anthropic.com` with the `anthropic` provider. |
 | `CASHFLOW_LLM_MODEL` | `openai/gpt-oss-120b` | Any tool-calling model id from your provider. |
 
-### Run with PostgreSQL
+### Deploy on Render
 
-The `postgres` profile creates tables from `src/main/resources/db/schema.sql` on startup and seeds demo data only if the tables are empty.
-
-```bash
-export SPRING_PROFILES_ACTIVE=postgres
-export DATABASE_URL=jdbc:postgresql://HOST:5432/DBNAME
-export DATABASE_USERNAME=...
-export DATABASE_PASSWORD=...
-mvn spring-boot:run
-```
+`render.yaml` is a Render blueprint: one Blueprint creates the backend (Docker),
+a managed PostgreSQL database, and the React frontend as a static site.
+Set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` and
+`CASHFLOW_LLM_API_KEY` in the Render dashboard after creation.
 
 ### Try the API
 
@@ -113,6 +117,7 @@ curl -X POST localhost:8080/api/invoices/1/paypal-sync         # create + send I
 | `GET /api/actions/pending`, `POST /api/actions/{id}/approve` / `reject` | Human approval |
 | `GET /api/autonomy`, `POST /api/autonomy/{type}?mode=AUTO` | Earned autonomy |
 | `GET /api/dashboard` | Outstanding, overdue, collected since the agent engaged, reconciled, guardrail blocks |
+| `GET /api/timeline` | Events for the Bryntum timeline: invoice due dates, pending promises, agent follow-ups |
 | `GET/POST /api/portal/{token}/...` | Fix & Pay page: `po`, `already-paid`, `plan/quote`, `plan/accept`, `promise`, `dispute`, `message` |
 | `POST /mcp` | MCP server for the customer's AI agent (bearer access key per customer) |
 | `POST /api/paypal/webhooks` | Verified PayPal webhooks: `INVOICING.INVOICE.PAID`, `INVOICING.INVOICE.UPDATED`, `CUSTOMER.DISPUTE.CREATED` |
@@ -173,13 +178,25 @@ src/main/java/com/cashflowai
 ├── time/        DemoClock (business date that the demo can move forward)
 └── web/         REST controllers
 
-frontend/        React + Vite + AG Grid: dashboard, cases, approvals, invoices, autonomy, demo, Fix & Pay page
+frontend/        React + Vite. AG Grid (invoices), AG Charts (dashboard), Bryntum Calendar (timeline):
+                 dashboard, cases, approvals, invoices, timeline, autonomy, demo, Fix & Pay page
 
 src/main/resources
-├── application.yml           default config (H2, reads .env)
-├── application-postgres.yml  postgres profile
+├── application.yml           default config (PostgreSQL, reads .env)
 └── db/schema.sql             PostgreSQL schema (validated against the entities in SchemaValidationTest)
+
+docker-compose.yml            local PostgreSQL (+ cashflow_test for `mvn test`)
+Dockerfile, render.yaml       Render blueprint: backend + managed Postgres + static frontend
 ```
+
+## Hackathon resources used
+
+- **PayPal Invoicing v2 + webhooks** (sandbox) — see "PayPal integration" above.
+- **AG Grid / AG Charts** — invoice grid on the Invoices page; aging and case-status charts on the dashboard.
+- **Bryntum Calendar** (trial package `@bryntum/calendar-trial`, aliased to `@bryntum/calendar`) — Timeline page.
+- **Render** — `render.yaml` blueprint deploys the whole stack.
+- **APIMatic Context Plugin for PayPal** — gives your AI coding tool PayPal API context while developing; see the hackathon resources page for install. Dev-time only, no code change needed.
+- **PayPal AI Toolkit / MCP** — the project exposes its own MCP server at `/mcp` for the customer's agent.
 
 ## Team TODO
 

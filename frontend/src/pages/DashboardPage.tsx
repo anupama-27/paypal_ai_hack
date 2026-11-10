@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { get, money, post, type AutonomyRule, type CaseView, type Dashboard, type RunView } from '../api'
+import { AgCharts } from 'ag-charts-react'
+import { AllCommunityModule, type AgChartOptions } from 'ag-charts-community'
+import { get, money, post, type AutonomyRule, type CaseView, type Dashboard, type InvoiceView, type RunView } from '../api'
 import { Badge } from '../components/Badge'
 
 export default function DashboardPage() {
   const [d, setD] = useState<Dashboard | null>(null)
   const [cases, setCases] = useState<CaseView[]>([])
+  const [invoices, setInvoices] = useState<InvoiceView[]>([])
   const [run, setRun] = useState<RunView | null>(null)
   const [suggestions, setSuggestions] = useState<AutonomyRule[]>([])
   const [error, setError] = useState('')
@@ -14,8 +17,44 @@ export default function DashboardPage() {
   const load = useCallback(() => {
     get<Dashboard>('/api/dashboard').then(setD).catch((e) => setError(e.message))
     get<CaseView[]>('/api/cases').then(setCases).catch(() => {})
+    get<InvoiceView[]>('/api/invoices').then(setInvoices).catch(() => {})
     get<AutonomyRule[]>('/api/autonomy').then((r) => setSuggestions(r.filter((x) => x.suggestPromotion))).catch(() => {})
   }, [])
+
+  // Outstanding money bucketed by how late it is (AG Charts).
+  const agingChart = useMemo<AgChartOptions>(() => {
+    const buckets = [
+      { bucket: 'Not yet due', amount: 0 },
+      { bucket: '1-30 days', amount: 0 },
+      { bucket: '31-60 days', amount: 0 },
+      { bucket: '60+ days', amount: 0 },
+    ]
+    for (const i of invoices) {
+      if (i.outstanding <= 0) continue
+      const b = i.daysOverdue <= 0 ? 0 : i.daysOverdue <= 30 ? 1 : i.daysOverdue <= 60 ? 2 : 3
+      buckets[b].amount += i.outstanding
+    }
+    return {
+      height: 260,
+      data: buckets,
+      series: [{ type: 'bar' as const, xKey: 'bucket', yKey: 'amount', yName: 'Outstanding' }],
+      axes: {
+        x: { type: 'category' as const, position: 'bottom' as const },
+        y: { type: 'number' as const, position: 'left' as const,
+          label: { formatter: (p: { value: number }) => money(p.value) } },
+      },
+    } as unknown as AgChartOptions
+  }, [invoices])
+
+  const caseChart = useMemo<AgChartOptions>(() => {
+    const counts = new Map<string, number>()
+    for (const c of cases) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
+    return {
+      height: 260,
+      data: [...counts.entries()].map(([status, count]) => ({ status, count })),
+      series: [{ type: 'donut' as const, angleKey: 'count', legendItemKey: 'status', innerRadiusRatio: 0.6 }],
+    } as AgChartOptions
+  }, [cases])
 
   useEffect(() => {
     load()
@@ -83,6 +122,17 @@ export default function DashboardPage() {
           <Kpi title="Guardrail blocks" value={d.guardrailBlocks} sub="unsafe actions stopped by policy" />
         </section>
       )}
+
+      <section className="charts">
+        <div className="card">
+          <h2>Outstanding by age</h2>
+          <AgCharts options={agingChart} modules={AllCommunityModule} />
+        </div>
+        <div className="card">
+          <h2>Cases by status</h2>
+          {cases.length ? <AgCharts options={caseChart} modules={AllCommunityModule} /> : <p className="muted">No cases yet.</p>}
+        </div>
+      </section>
 
       <section className="card">
         <h2>Latest cases</h2>
