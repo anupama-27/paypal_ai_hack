@@ -60,6 +60,7 @@ public class PaymentPromise {
     public Long getInvoiceId() { return invoiceId; }
     public BigDecimal getAmount() { return amount; }
     public LocalDate getDueDate() { return dueDate; }
+    public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
     public String getSource() { return source; }
     public PromiseStatus getStatus() { return status; }
     public void setStatus(PromiseStatus status) { this.status = status; }

@@ -92,6 +92,7 @@ public class Invoice {
     public BigDecimal getAmount() { return amount; }
     public String getCurrency() { return currency; }
     public LocalDate getDueDate() { return dueDate; }
+    public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
     public InvoiceStatus getStatus() { return status; }
     public void setStatus(InvoiceStatus status) { this.status = status; }
     public String getReference() { return reference; }

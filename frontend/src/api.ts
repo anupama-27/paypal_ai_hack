@@ -11,7 +11,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = `${res.status} ${res.statusText}`
     try {
       const body = await res.json()
-      message = body.error ?? body.message ?? message
+      message = body.message || body.error || message
     } catch {
       // response had no JSON body
     }
@@ -23,6 +23,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const get = <T>(path: string) => request<T>(path)
 export const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
+
+export const put = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) })
 
 export interface Dashboard {
   outstanding: number
@@ -144,12 +147,14 @@ export interface InvoiceView {
 
 export interface TimelineEvent {
   kind: 'INVOICE_DUE' | 'PROMISE_DUE' | 'FOLLOW_UP'
+  sourceId: number
   date: string
   label: string
   invoiceNumber: string | null
   caseId: number | null
   amount: number | null
   status: string
+  time: string
 }
 
 export interface AutonomyRule {

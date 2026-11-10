@@ -21,6 +21,9 @@ spring:
 
 server:
   port: ${PORT:8080}
+  error:
+    # Lets the UI show validation messages (e.g. "time must look like 14:30").
+    include-message: always
 
 paypal:
   base-url: https://api-m.sandbox.paypal.com

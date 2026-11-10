@@ -41,7 +41,7 @@ code { background: #f0f2f7; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .sidebar nav a.active, .sidebar nav a:hover { background: rgba(255, 255, 255, 0.12); color: #fff; text-decoration: none; }
 .sidebar-footer { margin-top: auto; font-size: 12px; color: #c9d7f3; line-height: 1.7; }
 .sidebar-footer.muted { color: #c9d7f3; }
-.content { flex: 1; padding: 24px 32px; max-width: 1280px; }
+.content { flex: 1; min-width: 0; padding: 24px 32px; max-width: 1280px; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
 .page-header p { margin: 0; max-width: 720px; }
@@ -52,6 +52,11 @@ code { background: #f0f2f7; padding: 1px 5px; border-radius: 4px; font-size: 12p
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
 .grid-wrap { padding: 0; overflow: hidden; }
+/* Wide tables scroll inside their card instead of stretching the page. */
+.card { overflow-x: auto; }
+.grid-wrap { overflow: hidden; }
+/* Let grid children shrink (charts, KPI tiles) instead of forcing the page wider. */
+.charts > *, .grid-2 > *, .kpis > * { min-width: 0; }
 
 button { font: inherit; border: 1px solid var(--line); background: #fff; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--brand-2); }
@@ -144,3 +149,20 @@ blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--bran
 .portal-amount { font-size: 28px; font-weight: 700; margin: 6px 0 10px; }
 .paypal-button { display: block; text-align: center; margin-top: 16px; background: #ffc439; color: #111; font-weight: 700; padding: 12px; border-radius: 999px; }
 .paypal-button:hover { text-decoration: none; filter: brightness(0.97); }
+
+/* Timeline events come from invoices, promises and cases, so the calendar's Delete is hidden. */
+.b-event-editor [data-ref="deleteButton"] { display: none; }
+
+/* Small screens: sidebar becomes a top bar, content uses the full width. */
+@media (max-width: 800px) {
+  .shell { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; }
+  .brand { margin-bottom: 0; }
+  .sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .sidebar nav a { padding: 6px 10px; }
+  .sidebar-footer { display: none; }
+  .content { padding: 16px; width: 100%; }
+  .page-header { flex-direction: column; }
+  .timeline-page { height: auto; min-height: 80vh; }
+}
+@media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
