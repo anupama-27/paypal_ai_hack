@@ -1,47 +1,48 @@
-# Render blueprint: one click deploy of the backend (Docker), managed Postgres,
-# and the React frontend as a static site. New Blueprint from this repo on render.com.
+databases:
+  - name: cashflow-db
+    databaseName: cashflow
+    user: cashflow
+    plan: free          # free DBs expire after ~30 days; use basic-256mb for anything lasting
+    region: oregon
+
 services:
+  # ---------- Backend (Spring Boot, Docker) ----------
   - type: web
-    name: cashflow-ai
+    name: cashflow-ai-api
     runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
     healthCheckPath: /actuator/health
     envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: postgres
       - key: DB_HOST
-        fromDatabase:
-          name: cashflow-db
-          property: host
+        fromDatabase: { name: cashflow-db, property: host }
       - key: DB_PORT
-        fromDatabase:
-          name: cashflow-db
-          property: port
+        fromDatabase: { name: cashflow-db, property: port }
       - key: DB_NAME
-        fromDatabase:
-          name: cashflow-db
-          property: database
+        fromDatabase: { name: cashflow-db, property: database }
       - key: DATABASE_USERNAME
-        fromDatabase:
-          name: cashflow-db
-          property: user
+        fromDatabase: { name: cashflow-db, property: user }
       - key: DATABASE_PASSWORD
-        fromDatabase:
-          name: cashflow-db
-          property: password
+        fromDatabase: { name: cashflow-db, property: password }
+      # Frontend URL: if Render adds a suffix to the name, update these two values.
       - key: CASHFLOW_APP_BASE_URL
-        value: https://cashflow-ai-frontend.onrender.com
+        value: https://cashflow-ai-web.onrender.com
       - key: CASHFLOW_CORS_ORIGINS
-        value: https://cashflow-ai-frontend.onrender.com
+        value: https://cashflow-ai-web.onrender.com
       - key: CASHFLOW_DEMO_ENABLED
         value: "true"
-      # Fill these in the Render dashboard after the blueprint is created.
       - key: PAYPAL_ENABLED
-        value: "false"
+        value: "true"
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: PAYPAL_DEMO_BUYER_EMAIL
-        sync: false
       - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_DEMO_BUYER_EMAIL
         sync: false
       - key: CASHFLOW_LLM_API_KEY
         sync: false
@@ -52,20 +53,17 @@ services:
       - key: CASHFLOW_LLM_MODEL
         value: openai/gpt-oss-120b
 
+  # ---------- Frontend (React/Vite static site) ----------
   - type: web
-    name: cashflow-ai-frontend
+    name: cashflow-ai-web
     runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
-    pullRequestPreviewsEnabled: false
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://cashflow-ai-api.onrender.com
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-    envVars:
-      - key: VITE_API_BASE
-        value: https://cashflow-ai.onrender.com
-
-databases:
-  - name: cashflow-db
-    plan: free
