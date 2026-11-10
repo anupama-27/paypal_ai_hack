@@ -5,16 +5,19 @@ spring:
   config:
     import: optional:file:.env[.properties]
   datasource:
-    url: jdbc:h2:mem:cashflow;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
+    # Render-style JDBC_DATABASE_URL wins, then DATABASE_URL, then local defaults.
+    url: ${JDBC_DATABASE_URL:${DATABASE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:cashflow}}}
+    username: ${DATABASE_USERNAME:cashflow}
+    password: ${DATABASE_PASSWORD:cashflow}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # Tables come from db/schema.sql; Hibernate only checks they match the entities.
+      ddl-auto: validate
     open-in-view: false
-  h2:
-    console:
-      enabled: true
 
 server:
   port: ${PORT:8080}
@@ -33,7 +36,7 @@ paypal:
 cashflow:
   # Where the React app runs; used for Fix & Pay links in reminders
   app-base-url: ${CASHFLOW_APP_BASE_URL:http://localhost:5173}
-  cors-origins: ${CASHFLOW_CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
+  cors-origins: ${CASHFLOW_CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000}
   demo:
     # Reset / advance-time / simulate-payment endpoints. Turn off for a real deployment.
     enabled: ${CASHFLOW_DEMO_ENABLED:true}

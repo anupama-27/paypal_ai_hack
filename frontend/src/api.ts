@@ -142,6 +142,16 @@ export interface InvoiceView {
   fixAndPayLink: string
 }
 
+export interface TimelineEvent {
+  kind: 'INVOICE_DUE' | 'PROMISE_DUE' | 'FOLLOW_UP'
+  date: string
+  label: string
+  invoiceNumber: string | null
+  caseId: number | null
+  amount: number | null
+  status: string
+}
+
 export interface AutonomyRule {
   actionType: string
   mode: 'AUTO' | 'APPROVAL'

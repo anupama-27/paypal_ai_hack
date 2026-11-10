@@ -1,0 +1,6 @@
+# Tests run against a dedicated local Postgres database (docker compose up -d).
+spring:
+  datasource:
+    url: ${TEST_DATABASE_URL:jdbc:postgresql://localhost:5432/cashflow_test}
+    username: ${TEST_DATABASE_USERNAME:cashflow}
+    password: ${TEST_DATABASE_PASSWORD:cashflow}
