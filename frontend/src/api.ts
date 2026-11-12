@@ -132,6 +132,7 @@ export interface InvoiceView {
   id: number
   invoiceNumber: string
   customer: string
+  customerEmail: string | null
   amount: number
   paid: number
   outstanding: number

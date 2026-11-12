@@ -58,6 +58,15 @@ code { background: #f0f2f7; padding: 1px 5px; border-radius: 4px; font-size: 12p
 /* Let grid children shrink (charts, KPI tiles) instead of forcing the page wider. */
 .charts > *, .grid-2 > *, .kpis > * { min-width: 0; }
 
+dialog.modal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px 12px 12px; width: min(900px, 94vw); color: inherit; font: inherit; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
+dialog.modal .form { max-width: none; }
+dialog.modal .modal-fields { display: flex; flex-direction: column; gap: 14px; }
+dialog.modal label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+dialog.modal input { padding: 10px 12px; font-size: 15px; width: 100%; box-sizing: border-box; }
+dialog.modal .form .row { margin-top: 18px; gap: 12px; }
+dialog.modal::backdrop { background: rgba(15, 23, 42, 0.45); }
+dialog.modal h2 { margin-top: 0; }
+
 button { font: inherit; border: 1px solid var(--line); background: #fff; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--brand-2); }
 button:disabled { opacity: 0.55; cursor: default; }

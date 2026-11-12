@@ -14,7 +14,7 @@ public final class Views {
     private Views() {
     }
 
-    public record InvoiceView(Long id, String invoiceNumber, String customer, BigDecimal amount,
+    public record InvoiceView(Long id, String invoiceNumber, String customer, String customerEmail, BigDecimal amount,
                               BigDecimal paid, BigDecimal outstanding, String currency, LocalDate dueDate,
                               long daysOverdue, String status, String purchaseOrder, String paypalInvoiceId,
                               String paypalPayerUrl, String fixAndPayLink) {
