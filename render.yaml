@@ -32,6 +32,13 @@ services:
         value: https://cashflow-ai-web.onrender.com
       - key: CASHFLOW_CORS_ORIGINS
         value: https://cashflow-ai-web.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: CASHFLOW_AUTH_SESSION_SECRET
+        generateValue: true
+      # Optional comma-separated Google emails allowed to sign in (empty = any Google account)
+      - key: CASHFLOW_AUTH_ALLOWED_EMAILS
+        sync: false
       - key: CASHFLOW_DEMO_ENABLED
         value: "true"
       - key: PAYPAL_ENABLED

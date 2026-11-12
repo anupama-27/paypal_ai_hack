@@ -40,6 +40,13 @@ cashflow:
   # Where the React app runs; used for Fix & Pay links in reminders
   app-base-url: ${CASHFLOW_APP_BASE_URL:http://localhost:5173}
   cors-origins: ${CASHFLOW_CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000}
+  auth:
+    # Google OAuth Web client id. Empty = login disabled (local dev/tests).
+    google-client-id: ${GOOGLE_CLIENT_ID:}
+    # Optional comma-separated allow-list of Google emails; empty = any verified Google account.
+    allowed-emails: ${CASHFLOW_AUTH_ALLOWED_EMAILS:}
+    session-secret: ${CASHFLOW_AUTH_SESSION_SECRET:}
+    session-hours: 12
   demo:
     # Reset / advance-time / simulate-payment endpoints. Turn off for a real deployment.
     enabled: ${CASHFLOW_DEMO_ENABLED:true}

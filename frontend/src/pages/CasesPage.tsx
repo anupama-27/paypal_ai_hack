@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, ICellRendererParams } from 'ag-grid-community'
 import { get, label, money, type CaseView } from '../api'
-import { Badge } from '../components/Badge'
+import { Cause, Problem, StatusTrack } from '../components/Badge'
 
 const FILTERS = ['ALL', 'OPEN', 'WAITING_APPROVAL', 'MONITORING', 'ESCALATED', 'RESOLVED']
 
@@ -29,13 +29,13 @@ export default function CasesPage() {
     { field: 'customer', flex: 1 },
     { field: 'amount', valueFormatter: (p) => money(p.value), width: 120 },
     { field: 'caseType', headerName: 'Problem', width: 170,
-      cellRenderer: (p: ICellRendererParams<CaseView>) => <Badge value={p.value} /> },
+      cellRenderer: (p: ICellRendererParams<CaseView>) => <Problem value={p.value} /> },
     { field: 'rootCause', headerName: 'Root cause', width: 170,
-      cellRenderer: (p: ICellRendererParams<CaseView>) => <Badge value={p.value} /> },
+      cellRenderer: (p: ICellRendererParams<CaseView>) => <Cause value={p.value} status={p.data?.status} /> },
     { field: 'confidence', headerName: 'Confidence', width: 120,
       valueFormatter: (p) => p.value != null ? `${Math.round(p.value * 100)}%` : '' },
     { field: 'status', width: 170,
-      cellRenderer: (p: ICellRendererParams<CaseView>) => <Badge value={p.value} /> },
+      cellRenderer: (p: ICellRendererParams<CaseView>) => <StatusTrack value={p.value} /> },
     { field: 'nextCheckAt', headerName: 'Next check', width: 120 },
   ], [])
 

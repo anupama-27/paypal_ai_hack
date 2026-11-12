@@ -93,7 +93,7 @@ export default function InvoicesPage() {
     { field: 'outstanding', valueFormatter: (p) => money(p.value), flex: 100, minWidth: 85, sort: 'desc' },
     { field: 'dueDate', headerName: 'Due', flex: 115, minWidth: 95 },
     { field: 'daysOverdue', headerName: 'Days late', flex: 80, minWidth: 60 },
-    { field: 'status', flex: 100, minWidth: 100, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
+    { field: 'status', flex: 100, minWidth: 150, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
     { field: 'purchaseOrder', headerName: 'PO', flex: 45, minWidth: 55 },
     {
       colId: 'paypal', headerName: 'PayPal', flex: 115, minWidth: 110, filter: false,

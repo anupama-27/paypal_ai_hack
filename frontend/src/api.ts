@@ -2,11 +2,27 @@ const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
 export const MCP_URL = `${BASE || 'http://localhost:8080'}/mcp`
 
+const TOKEN_KEY = 'cashflow.session'
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t)
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   const res = await fetch(BASE + path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   })
+  if (res.status === 401 && token && !path.startsWith('/api/portal/')) {
+    // Session expired or invalid: drop it and go back to the login page.
+    clearToken()
+    window.location.assign('/')
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {

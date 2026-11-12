@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AgCharts } from 'ag-charts-react'
 import { AllCommunityModule, type AgChartOptions } from 'ag-charts-community'
 import { get, money, post, type AutonomyRule, type CaseView, type Dashboard, type InvoiceView, type RunView } from '../api'
-import { Badge } from '../components/Badge'
+import { Cause, Problem, StatusTrack } from '../components/Badge'
 
 export default function DashboardPage() {
   const [d, setD] = useState<Dashboard | null>(null)
@@ -36,8 +36,9 @@ export default function DashboardPage() {
     }
     return {
       height: 260,
+      background: { visible: false },
       data: buckets,
-      series: [{ type: 'bar' as const, xKey: 'bucket', yKey: 'amount', yName: 'Outstanding' }],
+      series: [{ type: 'bar' as const, xKey: 'bucket', yKey: 'amount', yName: 'Outstanding', fill: '#0b1b3a', cornerRadius: 0 }],
       axes: {
         x: { type: 'category' as const, position: 'bottom' as const },
         y: { type: 'number' as const, position: 'left' as const,
@@ -51,8 +52,9 @@ export default function DashboardPage() {
     for (const c of cases) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
     return {
       height: 260,
+      background: { visible: false },
       data: [...counts.entries()].map(([status, count]) => ({ status, count })),
-      series: [{ type: 'donut' as const, angleKey: 'count', legendItemKey: 'status', innerRadiusRatio: 0.6 }],
+      series: [{ type: 'donut' as const, angleKey: 'count', legendItemKey: 'status', innerRadiusRatio: 0.6, fills: ['#0b1b3a', '#f2c94c', '#1f4fb8', '#a15c00', '#127a46', '#b42318'], strokeWidth: 0 }],
     } as AgChartOptions
   }, [cases])
 
@@ -149,9 +151,9 @@ export default function DashboardPage() {
                   <td><Link to={`/cases/${c.id}`}>{c.invoiceNumber}</Link></td>
                   <td>{c.customer}</td>
                   <td>{money(c.amount)}</td>
-                  <td><Badge value={c.caseType} /></td>
-                  <td>{c.rootCause ? <Badge value={c.rootCause} /> : <span className="muted">…</span>}</td>
-                  <td><Badge value={c.status} /></td>
+                  <td><Problem value={c.caseType} /></td>
+                  <td><Cause value={c.rootCause} status={c.status} /></td>
+                  <td><StatusTrack value={c.status} /></td>
                 </tr>
               ))}
             </tbody>

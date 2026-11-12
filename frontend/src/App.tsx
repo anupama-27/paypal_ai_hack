@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { get, type Dashboard } from './api'
+import { clearToken, get, type Dashboard } from './api'
+import { LoginPage, useAuth, type AuthUser } from './auth'
 import DashboardPage from './pages/DashboardPage'
 import CasesPage from './pages/CasesPage'
 import CaseDetailPage from './pages/CaseDetailPage'
@@ -20,6 +21,19 @@ export default function App() {
       </Routes>
     )
   }
+  return <AuthGate />
+}
+
+function AuthGate() {
+  const { config, user, setUser, checking, failed } = useAuth()
+  if (checking) return <div className="login-wrap muted">Loading…</div>
+  if (failed || !config) return <div className="login-wrap muted">Backend not reachable</div>
+  if (config.enabled && !user) return <LoginPage clientId={config.googleClientId} onLogin={setUser} />
+  return <Shell user={config.enabled ? user : null} />
+}
+
+function Shell({ user }: { user: AuthUser | null }) {
+  const location = useLocation()
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -36,6 +50,12 @@ export default function App() {
           <NavLink to="/demo">Demo controls</NavLink>
         </nav>
         <StatusFooter key={location.pathname} />
+        {user && (
+          <div className="sidebar-footer">
+            <div>{user.email}</div>
+            <button onClick={() => { clearToken(); window.location.assign('/') }}>Sign out</button>
+          </div>
+        )}
       </aside>
       <main className="content">
         <Routes>
