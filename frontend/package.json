@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@bryntum/calendar": "npm:@bryntum/calendar-trial@^7.3.8",
+    "@bryntum/calendar-trial": "^7.3.8",
+    "ag-charts-react": "^14.2.0",
     "ag-grid-community": "^34.0.0",
     "ag-grid-react": "^34.0.0",
     "react": "^19.0.0",

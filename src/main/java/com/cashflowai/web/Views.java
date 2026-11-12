@@ -33,6 +33,11 @@ public final class Views {
     public record PendingAction(AgentAction action, CaseView caseInfo) {
     }
 
+    /** One event on the Timeline page (Bryntum calendar). kind: INVOICE_DUE | PROMISE_DUE | FOLLOW_UP */
+    public record TimelineEvent(String kind, Long sourceId, LocalDate date, String label, String invoiceNumber,
+                                Long caseId, BigDecimal amount, String status, String time) {
+    }
+
     public record DashboardView(BigDecimal outstanding, BigDecimal overdue, BigDecimal collectedSinceAgent,
                                 BigDecimal reconciledByAgent, long openExceptions, long monitoring,
                                 long waitingApproval, long escalated, long resolved, long guardrailBlocks,

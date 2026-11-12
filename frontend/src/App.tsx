@@ -8,6 +8,7 @@ import CaseDetailPage from './pages/CaseDetailPage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import InvoicesPage from './pages/InvoicesPage'
 import AutonomyPage from './pages/AutonomyPage'
+import TimelinePage from './pages/TimelinePage'
 import DemoPage from './pages/DemoPage'
 import PortalPage from './pages/PortalPage'
 
@@ -44,6 +45,7 @@ function Shell({ user }: { user: AuthUser | null }) {
           <NavLink to="/cases">Cases</NavLink>
           <NavLink to="/approvals">Approvals</NavLink>
           <NavLink to="/invoices">Invoices</NavLink>
+          <NavLink to="/timeline">Timeline</NavLink>
           <NavLink to="/autonomy">Autonomy</NavLink>
           <NavLink to="/demo">Demo controls</NavLink>
         </nav>
@@ -62,6 +64,7 @@ function Shell({ user }: { user: AuthUser | null }) {
           <Route path="/cases/:id" element={<CaseDetailPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/autonomy" element={<AutonomyPage />} />
           <Route path="/demo" element={<DemoPage />} />
         </Routes>

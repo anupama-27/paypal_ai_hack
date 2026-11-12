@@ -68,7 +68,24 @@ public class PayPalClient {
         unit.put("currency_code", invoice.getCurrency());
         unit.put("value", invoice.getAmount().toPlainString());
 
-        JsonNode created = http.post()
+        JsonNode created;
+        try {
+            created = postInvoice(body);
+        } catch (org.springframework.web.client.HttpClientErrorException.UnprocessableEntity e) {
+            if (!e.getResponseBodyAsString().contains("DUPLICATE_INVOICE_NUMBER")) {
+                throw e;
+            }
+            // The number already exists in this PayPal account (e.g. from an earlier demo run).
+            // PayPal's number is cosmetic: we match by PayPal invoice id, so retry with a suffix.
+            String suffix = Long.toString(System.currentTimeMillis(), 36);
+            detail.put("invoice_number", invoice.getInvoiceNumber() + "-" + suffix);
+            created = postInvoice(body);
+        }
+        return created.path("id").asText();
+    }
+
+    private JsonNode postInvoice(ObjectNode body) {
+        return http.post()
                 .uri("/v2/invoicing/invoices")
                 .header(HttpHeaders.AUTHORIZATION, bearer())
                 .header("Prefer", "return=representation")
@@ -76,7 +93,6 @@ public class PayPalClient {
                 .body(body)
                 .retrieve()
                 .body(JsonNode.class);
-        return created.path("id").asText();
     }
 
     public void sendInvoice(String paypalInvoiceId) {

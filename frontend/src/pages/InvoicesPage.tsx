@@ -1,8 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
-import type { ColDef, ICellRendererParams } from 'ag-grid-community'
+import { themeQuartz, type ColDef, type GridApi, type ICellRendererParams } from 'ag-grid-community'
 import { get, money, post, type Dashboard, type InvoiceView } from '../api'
 import { Badge } from '../components/Badge'
+
+// Tighter cells so all columns fit the page without a horizontal scrollbar.
+// Columns hidden as the grid gets narrower, least important first.
+const HIDE_BELOW: [number, string[]][] = [
+  [1000, ['purchaseOrder', 'daysOverdue']],
+  [800, ['paypal', 'paid']],
+  [600, ['dueDate', 'amount']],
+  [480, ['status']],
+  [400, ['outstanding']],
+]
+
+function fitColumns(api: GridApi) {
+  const width = api.getDisplayedCenterColumns().length ? document.querySelector('.grid-wrap')?.clientWidth ?? 1200 : 1200
+  const hidden = HIDE_BELOW.filter(([max]) => width < max).flatMap(([, ids]) => ids)
+  const all = HIDE_BELOW.flatMap(([, ids]) => ids)
+  api.setColumnsVisible(all.filter((id) => !hidden.includes(id)), true)
+  api.setColumnsVisible(hidden, false)
+  api.sizeColumnsToFit()
+}
+
+const compactTheme = themeQuartz.withParams({ cellHorizontalPadding: 8, headerFontSize: 13, fontSize: 13 })
 
 export default function InvoicesPage() {
   const [rows, setRows] = useState<InvoiceView[]>([])
@@ -37,7 +58,7 @@ export default function InvoicesPage() {
     { field: 'status', flex: 100, minWidth: 150, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
     { field: 'purchaseOrder', headerName: 'PO', flex: 45, minWidth: 55 },
     {
-      headerName: 'PayPal', width: 200,
+      colId: 'paypal', headerName: 'PayPal', flex: 115, minWidth: 110,
       cellRenderer: (p: ICellRendererParams<InvoiceView>) => {
         const i = p.data!
         if (i.paypalInvoiceId) {
@@ -54,7 +75,7 @@ export default function InvoicesPage() {
       },
     },
     {
-      headerName: 'Customer link', width: 130,
+      colId: 'link', headerName: 'Customer link', flex: 100, minWidth: 80,
       cellRenderer: (p: ICellRendererParams<InvoiceView>) =>
         <a href={p.data!.fixAndPayLink} target="_blank" rel="noreferrer">Fix &amp; Pay</a>,
     },
@@ -70,8 +91,17 @@ export default function InvoicesPage() {
       </header>
       {message && <div className="alert info">{message}</div>}
       <div className="card grid-wrap">
-        <AgGridReact<InvoiceView> rowData={rows} columnDefs={columns} domLayout="autoHeight" />
+        <AgGridReact<InvoiceView>
+          theme={compactTheme}
+          rowData={rows}
+          columnDefs={columns}
+          domLayout="autoHeight"
+          onGridReady={(e) => fitColumns(e.api)}
+          onGridSizeChanged={(e) => fitColumns(e.api)}
+          onFirstDataRendered={(e) => fitColumns(e.api)}
+        />
       </div>
     </div>
   )
 }
+
