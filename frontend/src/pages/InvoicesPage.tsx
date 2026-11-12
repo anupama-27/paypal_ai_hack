@@ -27,15 +27,15 @@ export default function InvoicesPage() {
   }, [load])
 
   const columns = useMemo<ColDef<InvoiceView>[]>(() => [
-    { field: 'invoiceNumber', headerName: 'Invoice', width: 110 },
-    { field: 'customer', flex: 1 },
-    { field: 'amount', valueFormatter: (p) => money(p.value), width: 120 },
-    { field: 'paid', valueFormatter: (p) => money(p.value), width: 120 },
-    { field: 'outstanding', valueFormatter: (p) => money(p.value), width: 130, sort: 'desc' },
-    { field: 'dueDate', headerName: 'Due', width: 120 },
-    { field: 'daysOverdue', headerName: 'Days late', width: 110 },
-    { field: 'status', width: 150, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
-    { field: 'purchaseOrder', headerName: 'PO', width: 120 },
+    { field: 'invoiceNumber', headerName: 'Invoice', flex: 85, minWidth: 70 },
+    { field: 'customer', flex: 115, minWidth: 80 },
+    { field: 'amount', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 70 },
+    { field: 'paid', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 70 },
+    { field: 'outstanding', valueFormatter: (p) => money(p.value), flex: 100, minWidth: 85, sort: 'desc' },
+    { field: 'dueDate', headerName: 'Due', flex: 115, minWidth: 95 },
+    { field: 'daysOverdue', headerName: 'Days late', flex: 80, minWidth: 60 },
+    { field: 'status', flex: 100, minWidth: 150, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
+    { field: 'purchaseOrder', headerName: 'PO', flex: 45, minWidth: 55 },
     {
       headerName: 'PayPal', width: 200,
       cellRenderer: (p: ICellRendererParams<InvoiceView>) => {

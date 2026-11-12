@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { get, label, money, type CaseView } from '../api'
-import { Badge } from '../components/Badge'
+import { Cause, Problem, StatusTrack } from '../components/Badge'
 
 const FILTERS = ['ALL', 'OPEN', 'WAITING_APPROVAL', 'MONITORING', 'ESCALATED', 'RESOLVED']
 
@@ -46,10 +46,10 @@ export default function CasesPage() {
                 <td><Link to={`/cases/${c.id}`}>{c.invoiceNumber}</Link></td>
                 <td>{c.customer}</td>
                 <td>{money(c.amount)}</td>
-                <td><Badge value={c.caseType} /></td>
-                <td><Badge value={c.rootCause} /></td>
+                <td><Problem value={c.caseType} /></td>
+                <td><Cause value={c.rootCause} status={c.status} /></td>
                 <td>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : ''}</td>
-                <td><Badge value={c.status} /></td>
+                <td><StatusTrack value={c.status} /></td>
                 <td>{c.nextCheckAt ?? ''}</td>
               </tr>
             ))}
