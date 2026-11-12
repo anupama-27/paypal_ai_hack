@@ -41,8 +41,8 @@ Customer replies are simulated, and all customers are fictional.
 Requirements: Java 21 and Maven, or IntelliJ IDEA, which has Maven built in.
 
 ```bash
-git clone https://github.com/anupama-27/paypal_hackathon.git
-cd paypal_hackathon
+git clone https://github.com/anupama-27/paypal_ai_hack.git
+cd paypal_ai_hack
 cp .env.example .env        # fill in values (optional at first)
 mvn spring-boot:run
 ```
@@ -76,6 +76,22 @@ LLM settings (all in `.env`):
 | `CASHFLOW_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Use `https://api.anthropic.com` with the `anthropic` provider. |
 | `CASHFLOW_LLM_MODEL` | `openai/gpt-oss-120b` | Any tool-calling model id from your provider. |
 
+### Run the tests
+
+Tests run against a local PostgreSQL database `cashflow_test`. Start it with `docker compose up -d`, then run `mvn test`. Override the connection with `TEST_DATABASE_URL`, `TEST_DATABASE_USERNAME` and `TEST_DATABASE_PASSWORD`.
+
+### Google login
+
+Sign-in with Google protects the dashboard and every `/api/*` endpoint. These stay public: `/api/auth/config`, `/api/auth/google`, the customer Fix & Pay portal (`/api/portal/*`) and the PayPal webhook.
+
+| Variable | Notes |
+|---|---|
+| `GOOGLE_CLIENT_ID` | OAuth "Web application" client id (Google Cloud Console → APIs & Services → Credentials). Add your frontend origin (e.g. `http://localhost:5173`) as an authorized JavaScript origin. **Empty disables login**, which is the default for local dev and tests. |
+| `CASHFLOW_AUTH_SESSION_SECRET` | Secret used to sign session tokens. Render generates it for you. |
+| `CASHFLOW_AUTH_ALLOWED_EMAILS` | Optional comma-separated allow-list of Google emails. Empty means any verified Google account. |
+
+Sessions last 12 hours (`cashflow.auth.session-hours`). Auth endpoints: `GET /api/auth/config`, `POST /api/auth/google` (exchange a Google ID token for a session), `GET /api/auth/me`.
+
 ### Run with PostgreSQL
 
 The `postgres` profile creates tables from `src/main/resources/db/schema.sql` on startup and seeds demo data only if the tables are empty.
@@ -88,20 +104,11 @@ export DATABASE_PASSWORD=...
 mvn spring-boot:run
 ```
 
-### Try the API
-
-```bash
-curl -X POST localhost:8080/api/agent/run          # detect + investigate in the background, returns a run id
-curl localhost:8080/api/agent/runs/latest          # progress of the latest run
-curl localhost:8080/api/dashboard                  # summary numbers
-curl localhost:8080/api/cases/1                    # case file: diagnosis, invoice, messages, audit trail
-curl localhost:8080/api/actions/pending            # everything waiting for approval
-curl -X POST "localhost:8080/api/actions/3/approve?by=utsav"   # approve a pending action
-curl -X POST localhost:8080/api/invoices/1/paypal-sync         # create + send INV-101 in the PayPal sandbox
-```
+### API
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /api/auth/config`, `POST /api/auth/google`, `GET /api/auth/me` | Google login (see above) |
 | `GET /api/invoices` | Invoices with paid/outstanding, PayPal link and Fix & Pay link (AG Grid) |
 | `POST /api/invoices/{id}/paypal-sync` | Push an invoice to the PayPal sandbox |
 | `POST /api/invoices/{id}/paypal-refresh` | Pull payments PayPal recorded on the invoice |
@@ -169,11 +176,13 @@ src/main/java/com/cashflowai
 ├── mcp/         McpController: MCP server for the customer's AI agent
 ├── action/      ActionService (side effects)
 ├── paypal/      PayPalClient, InvoiceSyncService, PaymentSyncService
+├── auth/        AuthController, AuthFilter, AuthService: Google login and signed sessions
 ├── seed/        DemoDataService, DemoDataSeeder
 ├── time/        DemoClock (business date that the demo can move forward)
 └── web/         REST controllers
 
-frontend/        React + Vite + AG Grid: dashboard, cases, approvals, invoices, autonomy, demo, Fix & Pay page
+frontend/        React + Vite + AG Grid + AG Charts: login, dashboard (aging and case-status charts), cases,
+                 approvals, invoices, autonomy, demo, Fix & Pay page
 
 src/main/resources
 ├── application.yml           default config (H2, reads .env)
@@ -188,7 +197,9 @@ src/main/resources
 - [ ] Register the webhook in the Developer Dashboard, set `PAYPAL_WEBHOOK_ID`, and check a real `INVOICING.INVOICE.PAID` closes a case
 - [ ] Switch on the real LLM and tune `AgentOrchestrator.SYSTEM_PROMPT`
 - [ ] Try the MCP flow with Claude Desktop as Acme's AP assistant
-- [ ] Deploy to Render (`SPRING_PROFILES_ACTIVE=postgres`, frontend as a static site with `VITE_API_BASE`)
+- [ ] Create the Google OAuth client, add the local and deployed frontend origins, and set `GOOGLE_CLIENT_ID` (and `CASHFLOW_AUTH_ALLOWED_EMAILS` if restricting access)
+- [ ] Deploy to Render (`SPRING_PROFILES_ACTIVE=postgres`, frontend as a static site with `VITE_API_BASE`, auth variables set)
+- [ ] Start Postgres locally and confirm the full `mvn test` suite passes
 - [ ] Demo video under 3 minutes
 
 ## License
