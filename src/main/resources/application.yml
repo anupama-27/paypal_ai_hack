@@ -31,7 +31,7 @@ paypal:
   client-secret: ${PAYPAL_CLIENT_SECRET:}
   # false = PayPal calls are skipped and logged (lets you work without credentials)
   enabled: ${PAYPAL_ENABLED:false}
-  # Sandbox PERSONAL account email that receives demo invoices
+  # Invoices go to the customer's email; this sandbox PERSONAL account is only used when an invoice has none
   demo-buyer-email: ${PAYPAL_DEMO_BUYER_EMAIL:}
   # Developer Dashboard -> your app -> Webhooks -> Webhook ID (needed to verify signatures)
   webhook-id: ${PAYPAL_WEBHOOK_ID:}

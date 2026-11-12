@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +35,7 @@ public class AgentRunService {
 
     private static final class Run {
         final String id = UUID.randomUUID().toString();
+        final Long tenantId;
         final List<Long> caseIds;
         final Instant startedAt = Instant.now();
         volatile String status = "RUNNING";
@@ -41,7 +43,8 @@ public class AgentRunService {
         volatile Instant finishedAt;
         volatile String error;
 
-        Run(List<Long> caseIds) {
+        Run(Long tenantId, List<Long> caseIds) {
+            this.tenantId = tenantId;
             this.caseIds = caseIds;
         }
 
@@ -60,7 +63,8 @@ public class AgentRunService {
         t.setDaemon(true);
         return t;
     });
-    private volatile Run current;
+    /** Latest run per tenant; runs only touch that tenant's cases. */
+    private final Map<Long, Run> current = new ConcurrentHashMap<>();
 
     public AgentRunService(ExceptionDetectionService detection, CaseLifecycleService lifecycle,
                            AgentOrchestrator agent, ArCaseRepository cases) {
@@ -70,27 +74,30 @@ public class AgentRunService {
         this.cases = cases;
     }
 
-    /** Starts a run, or returns the one already in progress. */
-    public synchronized RunView start() {
-        if (current != null && "RUNNING".equals(current.status)) {
-            return current.view();
+    /** Starts a run over the tenant's waiting cases, or returns the tenant's run already in progress. */
+    public synchronized RunView start(Long tenantId, Set<Long> tenantInvoiceIds) {
+        Run active = current.get(tenantId);
+        if (active != null && "RUNNING".equals(active.status)) {
+            return active.view();
         }
         lifecycle.runFollowUps();
         detection.detect();
-        List<Long> waiting = cases.findByStatus(CaseStatus.DETECTED).stream().map(ArCase::getId).sorted().toList();
-        Run run = new Run(waiting);
+        List<Long> waiting = cases.findByStatus(CaseStatus.DETECTED).stream()
+                .filter(c -> tenantInvoiceIds.contains(c.getInvoiceId()))
+                .map(ArCase::getId).sorted().toList();
+        Run run = new Run(tenantId, waiting);
         runs.put(run.id, run);
-        current = run;
+        current.put(tenantId, run);
         worker.submit(() -> execute(run));
         return run.view();
     }
 
-    public Optional<RunView> get(String id) {
-        return Optional.ofNullable(runs.get(id)).map(Run::view);
+    public Optional<RunView> get(String id, Long tenantId) {
+        return Optional.ofNullable(runs.get(id)).filter(r -> r.tenantId.equals(tenantId)).map(Run::view);
     }
 
-    public Optional<RunView> latest() {
-        return Optional.ofNullable(current).map(Run::view);
+    public Optional<RunView> latest(Long tenantId) {
+        return Optional.ofNullable(current.get(tenantId)).map(Run::view);
     }
 
     private void execute(Run run) {

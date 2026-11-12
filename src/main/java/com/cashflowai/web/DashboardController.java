@@ -49,10 +49,12 @@ public class DashboardController {
     private final PayPalClient paypal;
     private final DemoClock clock;
     private final ObjectMapper mapper;
+    private final TenantContext tenant;
 
     public DashboardController(InvoiceRepository invoices, PaymentRepository payments, ArCaseRepository cases,
                                AgentActionRepository audit, AgentOrchestrator agent, AutonomyService autonomy,
-                               PayPalClient paypal, DemoClock clock, ObjectMapper mapper) {
+                               PayPalClient paypal, DemoClock clock, ObjectMapper mapper, TenantContext tenant) {
+        this.tenant = tenant;
         this.invoices = invoices;
         this.payments = payments;
         this.cases = cases;
@@ -69,7 +71,10 @@ public class DashboardController {
         LocalDate today = clock.today();
         BigDecimal outstanding = BigDecimal.ZERO;
         BigDecimal overdue = BigDecimal.ZERO;
-        for (Invoice i : invoices.findAll()) {
+        List<Invoice> mine = tenant.invoices();
+        Set<Long> mineIds = new HashSet<>();
+        mine.forEach(i -> mineIds.add(i.getId()));
+        for (Invoice i : mine) {
             if (CLOSED.contains(i.getStatus())) {
                 continue;
             }
@@ -80,7 +85,7 @@ public class DashboardController {
             }
         }
 
-        List<AgentAction> actions = audit.findAll();
+        List<AgentAction> actions = tenant.actions(audit.findAll());
         // Money that was already in PayPal and only needed matching: reconciled, not "collected".
         Set<Long> reconciledIds = new HashSet<>();
         for (AgentAction a : actions) {
@@ -95,12 +100,15 @@ public class DashboardController {
                 .map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Money that arrived after the agent opened a case on that invoice.
-        List<ArCase> all = cases.findAll();
+        List<ArCase> all = tenant.cases(cases.findAll());
         Map<Long, Instant> firstCaseAt = new HashMap<>();
         all.forEach(c -> firstCaseAt.merge(c.getInvoiceId(), c.getCreatedAt(), (a, b) -> a.isBefore(b) ? a : b));
         BigDecimal collected = BigDecimal.ZERO;
         for (Payment p : payments.findAll()) {
-            Instant caseAt = p.getInvoiceId() == null ? null : firstCaseAt.get(p.getInvoiceId());
+            if (p.getInvoiceId() == null || !mineIds.contains(p.getInvoiceId())) {
+                continue;
+            }
+            Instant caseAt = firstCaseAt.get(p.getInvoiceId());
             if (caseAt != null && p.getPaidAt() != null && p.getPaidAt().isAfter(caseAt)
                     && p.getStatus() == PaymentStatus.COMPLETED && !reconciledIds.contains(p.getId())) {
                 collected = collected.add(p.getAmount());

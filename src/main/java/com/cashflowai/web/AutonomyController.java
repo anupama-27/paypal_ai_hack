@@ -19,9 +19,11 @@ import java.util.List;
 public class AutonomyController {
 
     private final AutonomyService autonomy;
+    private final TenantContext tenant;
 
-    public AutonomyController(AutonomyService autonomy) {
+    public AutonomyController(AutonomyService autonomy, TenantContext tenant) {
         this.autonomy = autonomy;
+        this.tenant = tenant;
     }
 
     @GetMapping
@@ -31,6 +33,8 @@ public class AutonomyController {
 
     @PostMapping("/{actionType}")
     public RuleView setMode(@PathVariable ActionType actionType, @RequestParam AutonomyMode mode) {
+        // Rules apply to the agent across all tenants, so only the platform organization may change them.
+        tenant.requireDefaultTenant();
         return autonomy.setMode(actionType, mode);
     }
 }

@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -84,10 +85,19 @@ public class ActionService {
                 "invoice_status", invoice.getStatus().name());
     }
 
-    /** Turns on PayPal partial payments so the customer can pay the first installment on the PayPal invoice page. */
+    /**
+     * Turns on PayPal partial payments so the customer can pay the first installment on the PayPal invoice page.
+     * Best effort: PayPal does not offer partial payments in every country, and the agreed plan stands either way.
+     */
     public String enablePartialPayment(Invoice invoice, BigDecimal minimumFirstPayment) {
-        return callPayPal(invoice, () -> paypal.enablePartialPayment(invoice.getPaypalInvoiceId(),
-                invoice.getCurrency(), minimumFirstPayment.toPlainString()));
+        try {
+            return callPayPal(invoice, () -> paypal.enablePartialPayment(invoice.getPaypalInvoiceId(),
+                    invoice.getCurrency(), minimumFirstPayment.toPlainString()));
+        } catch (HttpClientErrorException e) {
+            log.warn("PayPal refused partial payments for {}: {}", invoice.getInvoiceNumber(),
+                    e.getResponseBodyAsString());
+            return "unavailable_on_paypal";
+        }
     }
 
     /** Returns "paypal_sandbox" if the real API was called, otherwise "simulated". */

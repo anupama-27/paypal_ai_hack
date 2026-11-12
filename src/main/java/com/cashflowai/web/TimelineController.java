@@ -1,6 +1,8 @@
 package com.cashflowai.web;
 
+import com.cashflowai.domain.ArCase;
 import com.cashflowai.domain.ArCaseRepository;
+import com.cashflowai.domain.PaymentPromise;
 import com.cashflowai.domain.Enums.InvoiceStatus;
 import com.cashflowai.domain.Enums.PromiseStatus;
 import com.cashflowai.domain.Invoice;
@@ -45,10 +47,13 @@ public class TimelineController {
     private final PaymentPromiseRepository promises;
     private final ArCaseRepository cases;
     private final TimelineOverrideRepository overrides;
+    private final TenantContext tenant;
     private final DemoClock clock;
 
     public TimelineController(InvoiceRepository invoices, PaymentPromiseRepository promises,
-                              ArCaseRepository cases, TimelineOverrideRepository overrides, DemoClock clock) {
+                              ArCaseRepository cases, TimelineOverrideRepository overrides, TenantContext tenant,
+                              DemoClock clock) {
+        this.tenant = tenant;
         this.invoices = invoices;
         this.promises = promises;
         this.cases = cases;
@@ -58,7 +63,7 @@ public class TimelineController {
 
     @GetMapping("/api/timeline")
     public List<TimelineEvent> events() {
-        List<Invoice> all = invoices.findAll();
+        List<Invoice> all = tenant.invoices();
         Map<Long, Invoice> byId = all.stream().collect(Collectors.toMap(Invoice::getId, Function.identity()));
         Map<String, TimelineOverride> edited = overrides.findAll().stream()
                 .collect(Collectors.toMap(o -> o.getKind() + ":" + o.getSourceId(), Function.identity()));
@@ -72,19 +77,20 @@ public class TimelineController {
             }
         }
 
-        promises.findByStatus(PromiseStatus.PENDING).forEach(p -> {
-            Invoice i = byId.get(p.getInvoiceId());
-            String number = i == null ? "#" + p.getInvoiceId() : i.getInvoiceNumber();
-            events.add(event(edited, "PROMISE_DUE", p.getId(), p.getDueDate(),
-                    "Promised payment on " + number, number, null, p.getAmount(), p.getStatus().name()));
-        });
+        promises.findByStatus(PromiseStatus.PENDING).stream().filter(p -> byId.containsKey(p.getInvoiceId()))
+                .forEach(p -> {
+                    String number = byId.get(p.getInvoiceId()).getInvoiceNumber();
+                    events.add(event(edited, "PROMISE_DUE", p.getId(), p.getDueDate(),
+                            "Promised payment on " + number, number, null, p.getAmount(), p.getStatus().name()));
+                });
 
-        cases.findAll().stream().filter(c -> c.isOpen() && c.getNextCheckAt() != null).forEach(c -> {
-            Invoice i = byId.get(c.getInvoiceId());
-            events.add(event(edited, "FOLLOW_UP", c.getId(), c.getNextCheckAt(),
-                    "Agent follow-up on " + (i == null ? "#" + c.getInvoiceId() : i.getInvoiceNumber()),
-                    i == null ? null : i.getInvoiceNumber(), c.getId(), null, c.getStatus().name()));
-        });
+        cases.findAll().stream()
+                .filter(c -> c.isOpen() && c.getNextCheckAt() != null && byId.containsKey(c.getInvoiceId()))
+                .forEach(c -> {
+                    String number = byId.get(c.getInvoiceId()).getInvoiceNumber();
+                    events.add(event(edited, "FOLLOW_UP", c.getId(), c.getNextCheckAt(),
+                            "Agent follow-up on " + number, number, c.getId(), null, c.getStatus().name()));
+                });
 
         return events;
     }
@@ -122,23 +128,31 @@ public class TimelineController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Title is required (max 255 characters)");
         }
 
-        if (body.date() != null) {
-            switch (kind) {
-                case "INVOICE_DUE" -> {
-                    Invoice invoice = invoices.findById(id)
-                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
+        // Ownership is checked before anything is written, including title/time overrides.
+        switch (kind) {
+            case "INVOICE_DUE" -> {
+                Invoice invoice = tenant.invoice(id);
+                if (body.date() != null) {
                     invoice.setDueDate(body.date());
                     // A due date moved into the future clears a stale OVERDUE flag; detection re-flags it if needed.
                     if (invoice.getStatus() == InvoiceStatus.OVERDUE && !body.date().isBefore(clock.today())) {
                         invoice.setStatus(InvoiceStatus.SENT);
                     }
                 }
-                case "PROMISE_DUE" -> promises.findById(id)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Promise not found"))
-                        .setDueDate(body.date());
-                default -> cases.findById(id)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Case not found"))
-                        .setNextCheckAt(body.date());
+            }
+            case "PROMISE_DUE" -> {
+                PaymentPromise promise = promises.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Promise not found"));
+                tenant.invoice(promise.getInvoiceId());
+                if (body.date() != null) {
+                    promise.setDueDate(body.date());
+                }
+            }
+            default -> {
+                ArCase c = tenant.arCase(id);
+                if (body.date() != null) {
+                    c.setNextCheckAt(body.date());
+                }
             }
         }
 

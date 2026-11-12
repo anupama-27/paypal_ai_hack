@@ -101,6 +101,37 @@ Sign-in with Google protects the dashboard and every `/api/*` endpoint. These st
 
 Sessions last 12 hours (`cashflow.auth.session-hours`). Auth endpoints: `GET /api/auth/config`, `POST /api/auth/google` (exchange a Google ID token for a session), `GET /api/auth/me`.
 
+### Run the tests
+
+Tests run against a local PostgreSQL database `cashflow_test` (created by `docker compose up -d`). Then run `mvn test`. Override the connection with `TEST_DATABASE_URL`, `TEST_DATABASE_USERNAME` and `TEST_DATABASE_PASSWORD`.
+
+### Google login
+
+Sign-in with Google protects the dashboard and every `/api/*` endpoint. These stay public: `/api/auth/config`, `/api/auth/google`, the customer Fix & Pay portal (`/api/portal/*`) and the PayPal webhook.
+
+| Variable | Notes |
+|---|---|
+| `GOOGLE_CLIENT_ID` | OAuth "Web application" client id (Google Cloud Console → APIs & Services → Credentials). Add your frontend origin (e.g. `http://localhost:5173`) as an authorized JavaScript origin. **Empty disables login**, which is the default for local dev and tests. |
+| `CASHFLOW_AUTH_SESSION_SECRET` | Secret used to sign session tokens. Render generates it for you. |
+| `CASHFLOW_AUTH_ALLOWED_EMAILS` | Comma-separated Google emails that become **merchants of the default organization** on first sign-in (it owns the demo data). |
+
+Sessions last 12 hours (`cashflow.auth.session-hours`).  Auth endpoints: `GET /api/auth/config`, `POST /api/auth/google` (exchange a Google ID token for a session), `GET /api/auth/me`.
+
+### Signing in: customer or merchant
+
+Each **tenant** is a seller organization; every invoice belongs to one (`invoice.tenant_id`). Sign-in has two steps:
+
+1. **Who you are**: Google (or, with `GOOGLE_CLIENT_ID` empty, a local "sign in with any email" page for development).
+2. **How you continue**, chosen on a picker and switchable any time from the sidebar:
+   - **Customer**: anyone. Sees *Invoices* and a read-only *Timeline* of everything billed to their verified email, by every seller, with Fix &amp; Pay and PayPal links. Merchant APIs answer 403.
+   - **Merchant**: pick one organization you are a member of (`tenant_member`), or create a new one (you become its first member). Everything (dashboard, agent runs, cases, approvals, invoices, timeline, members) is that one organization's; other organizations' records answer 404. One person can belong to many organizations but works in one at a time.
+
+The chosen role and tenant live in the session token, and membership is re-checked on every request: a removed member drops back to the picker immediately. Calls without a token while login is off (tests, curl) act as a merchant of the default organization.
+
+The **default organization** (seeded by `schema.sql`) is the platform operator: only its merchants can reset demo data, move the business date or change autonomy rules, because those are shared across organizations.
+
+Endpoints: `POST /api/auth/google` · `POST /api/auth/dev` (login off only) · `GET /api/auth/me` · `GET /api/auth/options` · `POST /api/auth/select` (`{role: CUSTOMER|MERCHANT|null, tenantId}`) · `POST /api/auth/tenants` (`{name}`) · `GET /api/customer/invoices` · `GET /api/customer/timeline` · `GET /api/admin/tenant` · `POST /api/admin/members` (`{email, name}`) · `DELETE /api/admin/members/{id}`.
+
 ### Deploy on Render
 
 `render.yaml` is a Render blueprint: one Blueprint creates the backend (Docker),
@@ -108,6 +139,7 @@ a managed PostgreSQL database, and the React frontend as a static site.
 Set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` and
 `CASHFLOW_LLM_API_KEY` in the Render dashboard after creation.
 
+### API
 ### API
 
 | Endpoint | Purpose |

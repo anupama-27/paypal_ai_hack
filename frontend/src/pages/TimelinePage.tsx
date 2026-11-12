@@ -18,8 +18,11 @@ function addHour(date: string, time: string): string {
   return `${date}T${String(Math.min(h + 1, 23)).padStart(2, '0')}:${String(h + 1 > 23 ? 59 : m).padStart(2, '0')}:00`
 }
 
-/** Bryntum calendar: invoice due dates, promised payments and agent follow-ups. */
-export default function TimelinePage() {
+/**
+ * Bryntum calendar: invoice due dates, promised payments and (for merchants) agent follow-ups.
+ * Customers get a read-only view of their own invoices from /api/customer/timeline.
+ */
+export default function TimelinePage({ source = '/api/timeline', readOnly = false }: { source?: string; readOnly?: boolean }) {
   const host = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
 
@@ -27,9 +30,10 @@ export default function TimelinePage() {
     if (!host.current) return
     const calendar = new Calendar({
       appendTo: host.current,
+      readOnly,
       features: {
         // Only what we can save: name, start date and start time.
-        eventEdit: {
+        eventEdit: readOnly ? false : {
           items: {
             resourceField: false, // "Calendar"
             allDay: false,
@@ -48,7 +52,7 @@ export default function TimelinePage() {
     })
     let cancelled = false
     const load = () =>
-      get<TimelineEvent[]>('/api/timeline')
+      get<TimelineEvent[]>(source)
         .then((events) => {
           if (cancelled) return
           calendar.eventStore.data = events.map((e) => ({
@@ -70,7 +74,7 @@ export default function TimelinePage() {
       // These events come from invoices, promises and cases, so they can't be deleted here.
       beforeRemove: () => false,
       update: ({ record, changes }: { record: any; changes: Record<string, unknown> }) => {
-        if (!changes.name && !changes.startDate) return
+        if (readOnly || (!changes.name && !changes.startDate)) return
         const d = record.startDate as Date
         const pad = (n: number) => String(n).padStart(2, '0')
         const body = {
@@ -90,21 +94,25 @@ export default function TimelinePage() {
       cancelled = true
       calendar.destroy()
     }
-  }, [])
+  }, [source, readOnly])
 
   return (
     <div className="timeline-page">
       <header className="page-header">
         <div>
           <h1>Timeline</h1>
-          <p className="muted">Upcoming invoice due dates, promised payments and agent follow-ups on one calendar.</p>
+          <p className="muted">
+            {readOnly
+              ? 'Due dates of your open invoices and payments you promised, from every seller.'
+              : 'Upcoming invoice due dates, promised payments and agent follow-ups on one calendar.'}
+          </p>
         </div>
       </header>
       {error && <div className="alert error">{error}</div>}
       <div className="legend-group" aria-label="Legend">
         <span className="legend legend-blue">Invoice due</span>
         <span className="legend legend-green">Promised payment</span>
-        <span className="legend legend-orange">Agent follow-up</span>
+        {!readOnly && <span className="legend legend-orange">Agent follow-up</span>}
       </div>
       <div className="card timeline-wrap" ref={host} />
     </div>

@@ -36,7 +36,7 @@ services:
         sync: false
       - key: CASHFLOW_AUTH_SESSION_SECRET
         generateValue: true
-      # Optional comma-separated Google emails allowed to sign in (empty = any Google account)
+      # Comma-separated Google emails made merchants of the default organization (demo data) on first sign-in
       - key: CASHFLOW_AUTH_ALLOWED_EMAILS
         sync: false
       - key: CASHFLOW_DEMO_ENABLED

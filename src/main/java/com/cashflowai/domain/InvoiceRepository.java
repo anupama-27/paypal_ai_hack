@@ -14,4 +14,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     Optional<Invoice> findByPortalToken(String portalToken);
 
     List<Invoice> findByCustomerEmailIgnoreCase(String customerEmail);
+
+    boolean existsByCustomerEmailIgnoreCase(String customerEmail);
+
+    List<Invoice> findByTenantId(Long tenantId);
 }

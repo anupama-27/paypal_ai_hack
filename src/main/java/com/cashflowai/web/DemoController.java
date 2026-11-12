@@ -52,11 +52,13 @@ public class DemoController {
     private final PayPalClient paypal;
     private final ActionService actions;
     private final AgentOrchestrator agent;
+    private final TenantContext tenant;
 
     public DemoController(DemoDataService demo, DemoClock clock, CaseLifecycleService lifecycle,
                           InvoiceRepository invoices, PaymentRepository payments, CustomerAccountRepository accounts,
                           InvoiceSyncService sync, PayPalClient paypal, ActionService actions,
-                          AgentOrchestrator agent) {
+                          AgentOrchestrator agent, TenantContext tenant) {
+        this.tenant = tenant;
         this.demo = demo;
         this.clock = clock;
         this.lifecycle = lifecycle;
@@ -77,9 +79,15 @@ public class DemoController {
         s.put("paypalEnabled", paypal.isEnabled());
         s.put("agentBrain", agent.brainName());
         List<Map<String, Object>> customers = new ArrayList<>();
+        List<Invoice> mine = tenant.invoices();
         for (CustomerAccount a : accounts.findAll()) {
+            List<Invoice> billed = mine.stream().filter(i -> a.getEmail().equalsIgnoreCase(i.getCustomerEmail()))
+                    .toList();
+            if (billed.isEmpty()) {
+                continue;
+            }
             customers.add(Map.of("name", a.getName(), "email", a.getEmail(), "accessKey", a.getAccessKey(),
-                    "fixAndPayLinks", invoices.findByCustomerEmailIgnoreCase(a.getEmail()).stream()
+                    "fixAndPayLinks", billed.stream()
                             .filter(i -> i.getStatus() != InvoiceStatus.PAID)
                             .map(i -> Map.of("invoice", i.getInvoiceNumber(), "link", actions.portalLink(i)))
                             .toList()));
@@ -90,6 +98,7 @@ public class DemoController {
 
     @PostMapping("/reset")
     public Map<String, Object> reset() {
+        tenant.requireDefaultTenant();
         demo.reset();
         return state();
     }
@@ -100,6 +109,7 @@ public class DemoController {
         if (days < 1 || days > 60) {
             throw new IllegalArgumentException("days must be between 1 and 60");
         }
+        tenant.requireDefaultTenant();
         clock.advance(days);
         int reopened = lifecycle.runFollowUps();
         Map<String, Object> s = state();
@@ -111,7 +121,7 @@ public class DemoController {
     @PostMapping("/publish-to-paypal")
     public Map<String, Object> publish() {
         int published = 0;
-        for (Invoice i : invoices.findAll()) {
+        for (Invoice i : tenant.invoices()) {
             if (i.getPaypalInvoiceId() == null && i.getStatus() != InvoiceStatus.PAID) {
                 sync.pushToPayPal(i.getId());
                 published++;
@@ -126,8 +136,7 @@ public class DemoController {
      */
     @PostMapping("/payments")
     public Map<String, Object> simulatePayment(@RequestBody SimulatedPayment req) {
-        Invoice invoice = invoices.findByInvoiceNumber(req.invoiceNumber())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown invoice " + req.invoiceNumber()));
+        Invoice invoice = tenant.invoiceByNumber(req.invoiceNumber());
         if (req.amount() == null || req.amount().signum() <= 0) {
             throw new IllegalArgumentException("amount must be positive");
         }

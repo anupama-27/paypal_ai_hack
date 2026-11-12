@@ -24,6 +24,10 @@ public class Invoice {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Seller organization that issued this invoice. */
+    @Column(nullable = false)
+    private Long tenantId;
+
     @Column(nullable = false, unique = true)
     private String invoiceNumber;
 
@@ -84,6 +88,8 @@ public class Invoice {
     }
 
     public Long getId() { return id; }
+    public Long getTenantId() { return tenantId; }
+    public Invoice inTenant(Long tenantId) { this.tenantId = tenantId; return this; }
     public String getInvoiceNumber() { return invoiceNumber; }
     public String getPaypalInvoiceId() { return paypalInvoiceId; }
     public void setPaypalInvoiceId(String paypalInvoiceId) { this.paypalInvoiceId = paypalInvoiceId; }

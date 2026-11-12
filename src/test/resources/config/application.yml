@@ -4,3 +4,8 @@ spring:
     url: ${TEST_DATABASE_URL:jdbc:postgresql://localhost:5432/cashflow_test}
     username: ${TEST_DATABASE_USERNAME:cashflow}
     password: ${TEST_DATABASE_PASSWORD:cashflow}
+
+# Tests call the API without signing in, even when the local .env enables Google login.
+cashflow:
+  auth:
+    google-client-id: ""

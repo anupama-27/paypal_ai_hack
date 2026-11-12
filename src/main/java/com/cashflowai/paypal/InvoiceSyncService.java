@@ -26,11 +26,13 @@ public class InvoiceSyncService {
         if (invoice.getPaypalInvoiceId() != null) {
             return invoice;
         }
-        if (props.demoBuyerEmail() == null || props.demoBuyerEmail().isBlank()) {
-            throw new IllegalStateException("Set PAYPAL_DEMO_BUYER_EMAIL to your sandbox personal account email");
+        // PayPal emails the invoice to the customer billed on it; the demo buyer is only a fallback.
+        String recipient = firstNonBlank(invoice.getCustomerEmail(), props.demoBuyerEmail());
+        if (recipient == null) {
+            throw new IllegalStateException("Invoice " + invoice.getInvoiceNumber()
+                    + " has no customer email (or set PAYPAL_DEMO_BUYER_EMAIL as a fallback)");
         }
-        // All demo invoices go to the sandbox buyer so you can open and pay them.
-        String paypalId = paypal.createDraftInvoice(invoice, props.demoBuyerEmail());
+        String paypalId = paypal.createDraftInvoice(invoice, recipient);
         paypal.sendInvoice(paypalId);
         invoice.setPaypalInvoiceId(paypalId);
         invoice.setPaypalPayerUrl(paypal.payerUrl(paypalId));
@@ -38,5 +40,14 @@ public class InvoiceSyncService {
             invoice.setStatus(InvoiceStatus.SENT);
         }
         return invoices.save(invoice);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v.trim();
+            }
+        }
+        return null;
     }
 }

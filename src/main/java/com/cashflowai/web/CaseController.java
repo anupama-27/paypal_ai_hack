@@ -20,6 +20,7 @@ import com.cashflowai.time.DemoClock;
 import com.cashflowai.web.Views.CaseDetail;
 import com.cashflowai.web.Views.CaseView;
 import com.cashflowai.web.Views.PendingAction;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -45,12 +47,14 @@ public class CaseController {
     private final ResolutionService resolution;
     private final ActionService actions;
     private final CaseLifecycleService lifecycle;
+    private final TenantContext tenant;
     private final DemoClock clock;
 
     public CaseController(ExceptionDetectionService detection, AgentOrchestrator agent, AgentRunService runs,
                           ToolExecutor executor, ArCaseRepository cases, InvoiceRepository invoices,
                           AgentActionRepository audit, ResolutionService resolution, ActionService actions,
-                          CaseLifecycleService lifecycle, DemoClock clock) {
+                          CaseLifecycleService lifecycle, TenantContext tenant, DemoClock clock) {
+        this.tenant = tenant;
         this.detection = detection;
         this.agent = agent;
         this.runs = runs;
@@ -67,17 +71,17 @@ public class CaseController {
     /** Step 1: Java rules scan invoices and open cases. */
     @PostMapping("/cases/detect")
     public List<CaseView> detect() {
-        return detection.detect().stream().map(this::view).toList();
+        return tenant.cases(detection.detect()).stream().map(this::view).toList();
     }
 
     @GetMapping("/cases")
     public List<CaseView> list() {
-        return cases.findAllByOrderByCreatedAtDesc().stream().map(this::view).toList();
+        return tenant.cases(cases.findAllByOrderByCreatedAtDesc()).stream().map(this::view).toList();
     }
 
     @GetMapping("/cases/{id}")
     public CaseDetail detail(@PathVariable Long id) {
-        ArCase c = cases.findById(id).orElseThrow();
+        ArCase c = tenant.arCase(id);
         Invoice i = invoices.findById(c.getInvoiceId()).orElseThrow();
         return new CaseDetail(view(c), resolution.summary(i), audit.findByCaseIdOrderByCreatedAtAsc(id),
                 actions.portalLink(i));
@@ -86,6 +90,7 @@ public class CaseController {
     /** Step 2: the AI agent investigates one case. */
     @PostMapping("/cases/{id}/investigate")
     public CaseView investigate(@PathVariable Long id) {
+        tenant.arCase(id);
         return view(agent.investigate(id));
     }
 
@@ -93,7 +98,7 @@ public class CaseController {
     @PostMapping("/cases/{id}/resolve")
     public CaseView resolve(@PathVariable Long id, @RequestParam(defaultValue = "owner") String by,
                             @RequestParam(defaultValue = "Resolved by the owner") String note) {
-        ArCase c = cases.findById(id).orElseThrow();
+        ArCase c = tenant.arCase(id);
         lifecycle.log(id, Actor.OWNER, "owner.resolve", ActionType.ESCALATE_TO_HUMAN, Map.of("by", by),
                 Map.of("note", note), "Owner closed the case");
         c.resolve(clock.now());
@@ -103,40 +108,49 @@ public class CaseController {
     /** Detect, then investigate every waiting case in the background. Poll the returned run. */
     @PostMapping("/agent/run")
     public AgentRunService.RunView runAll() {
-        return runs.start();
+        return runs.start(tenant.tenantId(), tenant.invoiceIds());
     }
 
     @GetMapping("/agent/runs/{runId}")
     public AgentRunService.RunView run(@PathVariable String runId) {
-        return runs.get(runId).orElseThrow();
+        return runs.get(runId, tenant.tenantId()).orElseThrow();
     }
 
     @GetMapping("/agent/runs/latest")
     public ResponseEntity<AgentRunService.RunView> latestRun() {
-        return ResponseEntity.of(runs.latest());
+        return ResponseEntity.of(runs.latest(tenant.tenantId()));
     }
 
     /** Audit trail for a case: every tool call and the policy decision. */
     @GetMapping("/cases/{id}/actions")
     public List<AgentAction> actions(@PathVariable Long id) {
+        tenant.arCase(id);
         return audit.findByCaseIdOrderByCreatedAtAsc(id);
     }
 
     @GetMapping("/actions/pending")
     public List<PendingAction> pending() {
-        return audit.findByStatusOrderByCreatedAtAsc(ActionStatus.PENDING_APPROVAL).stream()
+        return tenant.actions(audit.findByStatusOrderByCreatedAtAsc(ActionStatus.PENDING_APPROVAL)).stream()
                 .map(a -> new PendingAction(a, view(cases.findById(a.getCaseId()).orElseThrow())))
                 .toList();
     }
 
     @PostMapping("/actions/{id}/approve")
     public AgentAction approve(@PathVariable Long id, @RequestParam(defaultValue = "finance-user") String by) {
+        ownedAction(id);
         return executor.approve(id, by);
     }
 
     @PostMapping("/actions/{id}/reject")
     public AgentAction reject(@PathVariable Long id, @RequestParam(defaultValue = "finance-user") String by) {
+        ownedAction(id);
         return executor.reject(id, by);
+    }
+
+    private void ownedAction(Long id) {
+        AgentAction a = audit.findById(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Action not found"));
+        tenant.arCase(a.getCaseId());
     }
 
     CaseView view(ArCase c) {

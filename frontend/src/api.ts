@@ -190,6 +190,43 @@ export interface DemoState {
   followUpsReopened?: number
 }
 
+export interface CustomerInvoice {
+  id: number
+  invoiceNumber: string
+  seller: string
+  amount: number
+  paid: number
+  outstanding: number
+  currency: string
+  dueDate: string | null
+  daysOverdue: number
+  status: string
+  purchaseOrder: string | null
+  payUrl: string | null
+  fixAndPayLink: string
+}
+
+export interface MemberView {
+  id: number
+  email: string
+  name: string | null
+  createdAt: string
+}
+
+export interface TenantView {
+  id: number
+  name: string
+  platform: boolean
+  members: MemberView[]
+}
+
+export interface TenantOption {
+  id: number
+  name: string
+}
+
+export const del = <T>(path: string) => request<T>(path, { method: 'DELETE' })
+
 export interface PortalView extends InvoiceSummary {
   plan_limits: { max_installments: number; max_days: number; min_first_share: number }
 }

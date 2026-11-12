@@ -37,11 +37,13 @@ public class InvoiceController {
     private final PaymentSyncService paymentSync;
     private final ActionService actions;
     private final CaseLifecycleService lifecycle;
+    private final TenantContext tenant;
     private final DemoClock clock;
 
     public InvoiceController(InvoiceRepository invoices, PaymentRepository payments, InvoiceSyncService sync,
                              PaymentSyncService paymentSync, ActionService actions,
-                             CaseLifecycleService lifecycle, DemoClock clock) {
+                             CaseLifecycleService lifecycle, TenantContext tenant, DemoClock clock) {
+        this.tenant = tenant;
         this.invoices = invoices;
         this.payments = payments;
         this.sync = sync;
@@ -53,7 +55,7 @@ public class InvoiceController {
 
     @GetMapping
     public List<InvoiceView> list() {
-        return invoices.findAll().stream().map(this::view).toList();
+        return tenant.invoices().stream().map(this::view).toList();
     }
 
     public record NewInvoice(String invoiceNumber, String customerName, String customerEmail,
@@ -79,7 +81,8 @@ public class InvoiceController {
             return ResponseEntity.badRequest().body(Map.of("error", "paidAmount cannot exceed the invoice amount"));
         }
         Invoice invoice = new Invoice(body.invoiceNumber().trim(), body.customerName(), body.customerEmail(),
-                body.amount(), body.dueDate(), com.cashflowai.domain.Enums.InvoiceStatus.SENT);
+                body.amount(), body.dueDate(), com.cashflowai.domain.Enums.InvoiceStatus.SENT)
+                .inTenant(tenant.tenantId());
         if (body.purchaseOrder() != null && !body.purchaseOrder().isBlank()) {
             invoice.setReference(body.purchaseOrder().trim());
         }
@@ -101,13 +104,14 @@ public class InvoiceController {
     /** Creates and sends this invoice in the PayPal sandbox. */
     @PostMapping("/{id}/paypal-sync")
     public InvoiceView pushToPayPal(@PathVariable Long id) {
+        tenant.invoice(id);
         return view(sync.pushToPayPal(id));
     }
 
     /** Pulls payments PayPal recorded on this invoice (same path the webhook uses). */
     @PostMapping("/{id}/paypal-refresh")
     public Map<String, Object> refreshFromPayPal(@PathVariable Long id) {
-        Invoice invoice = invoices.findById(id).orElseThrow();
+        Invoice invoice = tenant.invoice(id);
         int added = paymentSync.syncFromPayPal(invoice);
         return Map.of("newPayments", added, "invoice", view(invoices.findById(id).orElseThrow()));
     }

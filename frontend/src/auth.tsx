@@ -1,10 +1,132 @@
 import { useEffect, useRef, useState } from 'react'
-import { get, post, setToken } from './api'
+import { clearToken, get, getToken, post, setToken, type TenantOption } from './api'
 
 export interface AuthUser {
   email: string
   name: string
   picture: string
+  /** null until the user picks how to continue */
+  role: 'CUSTOMER' | 'MERCHANT' | null
+  tenantId: number | null
+  tenantName: string | null
+}
+
+interface Session {
+  token: string
+  user: AuthUser
+}
+
+/** Stores the new session and reloads, so every page starts clean for the chosen role/tenant. */
+async function choose(role: AuthUser['role'], tenantId?: number) {
+  const s = await post<Session>('/api/auth/select', { role, tenantId: tenantId ?? null })
+  setToken(s.token)
+  window.location.assign('/')
+}
+
+export const switchRole = () => choose(null)
+
+export const signOut = () => {
+  clearToken()
+  window.location.assign('/')
+}
+
+/** Step 2 of sign-in: continue as a customer, or as a merchant of one organization. */
+export function RolePicker({ user }: { user: AuthUser }) {
+  const [tenants, setTenants] = useState<TenantOption[] | null>(null)
+  const [mode, setMode] = useState<'pick' | 'merchant'>('pick')
+  const [newOrg, setNewOrg] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    get<{ tenants: TenantOption[] }>('/api/auth/options').then((o) => setTenants(o.tenants)).catch((e) => setError(e.message))
+  }, [])
+
+  const run = (fn: () => Promise<unknown>) => {
+    setError('')
+    fn().catch((e) => setError((e as Error).message))
+  }
+
+  const createOrg = () => run(async () => {
+    const t = await post<TenantOption>('/api/auth/tenants', { name: newOrg })
+    await choose('MERCHANT', t.id)
+  })
+
+  return (
+    <div className="picker-wrap">
+      <div className="picker">
+        <p className="login-kicker dark">Signed in as {user.email}</p>
+        {mode === 'pick' ? (
+          <>
+            <h2>How do you want to continue?</h2>
+            <div className="picker-options">
+              <button className="picker-card" onClick={() => run(() => choose('CUSTOMER'))}>
+                <b>Customer</b>
+                <small>See invoices billed to {user.email} by any seller, and pay or fix them.</small>
+              </button>
+              <button className="picker-card" onClick={() => setMode('merchant')}>
+                <b>Merchant</b>
+                <small>Work in one of your organizations: agent, cases, invoices, timeline.</small>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>Choose an organization</h2>
+            <div className="picker-options column">
+              {tenants?.map((t) => (
+                <button key={t.id} className="picker-card" onClick={() => run(() => choose('MERCHANT', t.id))}>
+                  <b>{t.name}</b>
+                </button>
+              ))}
+              {tenants?.length === 0 && <p className="muted">You are not a member of any organization yet.</p>}
+            </div>
+            <div className="form picker-new">
+              <label>Or create a new organization
+                <input placeholder="Acme Supplies" value={newOrg} onChange={(e) => setNewOrg(e.target.value)} /></label>
+              <div className="row">
+                <button className="primary" disabled={!newOrg.trim()} onClick={createOrg}>Create and continue</button>
+                <button onClick={() => setMode('pick')}>Back</button>
+              </div>
+            </div>
+          </>
+        )}
+        {error && <p className="login-error">{error}</p>}
+        <button className="link picker-signout" onClick={signOut}>Sign out</button>
+      </div>
+    </div>
+  )
+}
+
+/** Local dev only (no GOOGLE_CLIENT_ID): sign in as any email to try both roles. */
+export function DevLoginPage({ onLogin }: { onLogin: (u: AuthUser) => void }) {
+  const [email, setEmail] = useState('ap@acme.example')
+  const [error, setError] = useState('')
+  const submit = async () => {
+    setError('')
+    try {
+      const s = await post<Session>('/api/auth/dev', { email })
+      setToken(s.token)
+      onLogin(s.user)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  return (
+    <div className="picker-wrap">
+      <div className="picker">
+        <p className="login-kicker dark">Local sign-in</p>
+        <h2>Google login is off</h2>
+        <p className="muted">Set GOOGLE_CLIENT_ID to require Google. Until then, sign in with any email: it joins the default organization, and as a customer you see invoices billed to it.</p>
+        <div className="form">
+          <label>Email
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && submit()} /></label>
+          <div className="row"><button className="primary" onClick={submit} disabled={!email.trim()}>Sign in</button></div>
+        </div>
+        {error && <p className="login-error">{error}</p>}
+      </div>
+    </div>
+  )
 }
 
 interface AuthConfig {
@@ -142,12 +264,11 @@ export function useAuth() {
     get<AuthConfig>('/api/auth/config')
       .then(async (c) => {
         setConfig(c)
-        if (c.enabled) {
-          try {
-            setUser(await get<AuthUser>('/api/auth/me'))
-          } catch {
-            setUser(null)
-          }
+        if (!getToken()) return
+        try {
+          setUser(await get<AuthUser>('/api/auth/me'))
+        } catch {
+          setUser(null)
         }
       })
       .catch(() => setFailed(true))
