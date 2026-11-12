@@ -35,22 +35,33 @@ export default function ApprovalsPage() {
         </div>
       </header>
       {error && <div className="alert error">{error}</div>}
-      {items.length === 0 && <section className="card muted">Nothing waiting. The agent is working inside your rules.</section>}
+      {items.length === 0 && (
+        <section className="card empty">
+          <b>Nothing waiting.</b>
+          <span className="muted">The agent is working inside your rules.</span>
+        </section>
+      )}
       {items.map(({ action, caseInfo }) => (
         <section className="card approval" key={action.id}>
-          <div className="row spread">
+          <div className="approval-head">
             <div>
-              <h3><Link to={`/cases/${caseInfo.id}`}>{caseInfo.invoiceNumber}</Link> · {caseInfo.customer} · {money(caseInfo.amount)}</h3>
-              <div className="row"><Badge value={caseInfo.rootCause} /> <span className="muted small">{when(action.createdAt)}</span></div>
+              <h3><Link to={`/cases/${caseInfo.id}`}>{caseInfo.invoiceNumber}</Link></h3>
+              <div className="approval-meta">
+                {caseInfo.customer} · {money(caseInfo.amount)} · <Badge value={caseInfo.rootCause} /> · {when(action.createdAt)}
+              </div>
             </div>
             <div className="row">
               <button className="primary" disabled={busy === action.id} onClick={() => decide(action.id, 'approve')}>Approve</button>
               <button className="danger" disabled={busy === action.id} onClick={() => decide(action.id, 'reject')}>Reject</button>
             </div>
           </div>
-          <p><b>Proposed:</b> <code>{action.toolName}</code> {describe(action.toolInput)}</p>
-          <p className="muted">Why it needs you: {action.policyReason}</p>
-          {caseInfo.explanation && <p className="muted">Agent's reasoning: {caseInfo.explanation}</p>}
+          <dl className="facts">
+            <dt>Proposed</dt>
+            <dd><code>{action.toolName}</code> {describe(action.toolInput)}</dd>
+            <dt>Why it needs you</dt>
+            <dd>{action.policyReason}</dd>
+            {caseInfo.explanation && <><dt>Agent's reasoning</dt><dd>{caseInfo.explanation}</dd></>}
+          </dl>
         </section>
       ))}
     </div>

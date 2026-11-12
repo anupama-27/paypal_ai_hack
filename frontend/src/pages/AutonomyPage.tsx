@@ -39,13 +39,14 @@ export default function AutonomyPage() {
       </header>
       {error && <div className="alert error">{error}</div>}
       {rules.map((r) => (
-        <section className="card row spread" key={r.actionType}>
+        <section className={`card rule ${r.mode === 'AUTO' ? 'auto' : 'ask'}`} key={r.actionType}>
           <div>
             <h3>{label(r.actionType)} <Badge value={r.mode} /></h3>
             <p className="muted">{EXPLAIN[r.actionType]}</p>
-            <p>Approval streak: <b>{r.approvalStreak}</b>
+            <div className="streak">
+              Approval streak <b>{r.approvalStreak}</b>
               {r.suggestPromotion && <span className="badge green">Ready to promote</span>}
-            </p>
+            </div>
           </div>
           {r.mode === 'APPROVAL'
             ? <button className="primary" onClick={() => setMode(r.actionType, 'AUTO')}>Let the agent do this</button>

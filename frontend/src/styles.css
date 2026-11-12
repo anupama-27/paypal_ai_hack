@@ -38,7 +38,8 @@ code { font-family: var(--mono); background: #ece6d6; padding: 1px 5px; border-r
 .center { text-align: center; }
 
 .shell { display: flex; min-height: 100vh; }
-.sidebar { width: 220px; background-color: var(--ink); background-image: repeating-linear-gradient(to bottom, transparent 0 39px, rgba(255, 255, 255, 0.045) 39px 40px); color: #fff; padding: 20px 14px; display: flex; flex-direction: column; }
+.sidebar { width: 220px; background-color: var(--ink); background-image: repeating-linear-gradient(to bottom, transparent 0 39px, rgba(255, 255, 255, 0.045) 39px 40px); color: #fff; padding: 20px 14px; display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh; box-sizing: border-box; overflow-y: auto; flex-shrink: 0; align-self: flex-start; }
 .brand { font-size: 19px; font-weight: 600; margin-bottom: 24px; padding-left: 38px; position: relative; line-height: 28px; }
 .brand::before { content: ''; position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 7px; background: var(--gold) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 11h14M9 16h14M9 21h8' stroke='%230b1b3a' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M20 19.5l3 2.5 3-2.5' fill='none' stroke='%230b1b3a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat; }
 .brand span { color: var(--gold); }
@@ -51,7 +52,7 @@ code { font-family: var(--mono); background: #ece6d6; padding: 1px 5px; border-r
 .sidebar-footer b { color: #e9edf6; font-weight: 500; }
 .sidebar-footer button { margin-top: 6px; background: transparent; color: var(--gold); border-color: rgba(242, 201, 76, 0.5); }
 .sidebar-footer.muted { color: #9aa7c4; }
-.content { flex: 1; min-width: 0; padding: 24px 32px; max-width: 1280px; }
+.content { flex: 1; min-width: 0; padding: 24px 32px; max-width: 2000px; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
 .page-header p { margin: 0; max-width: 720px; }
@@ -89,10 +90,36 @@ button.link { border: 0; background: none; padding: 0; color: var(--brand-2); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .chip { border-radius: 999px; padding: 5px 12px; }
 .chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.chip:hover:not(.active) { border-color: var(--brand); }
+.chip-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(11, 27, 58, 0.09); font-size: 11.5px; font-weight: 600; }
+.chip.active .chip-count { background: rgba(255, 255, 255, 0.22); }
+
+/* Search + status filter bar above the Cases and Invoices tables */
+.table-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.search-box { position: relative; flex: 1 1 280px; max-width: 380px; color: var(--muted); }
+.search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.search-box input { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--text); background: #fff;
+  border: 1px solid var(--line); border-radius: 999px; padding: 9px 34px 9px 36px; outline: none; transition: border-color .15s, box-shadow .15s; }
+.search-box input:focus { border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(31, 79, 184, 0.15); }
+.search-box input::-webkit-search-cancel-button { display: none; }
+.search-box .clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 50%; background: rgba(11, 27, 58, 0.1); color: var(--text); line-height: 1; font-size: 16px; }
+.search-box .clear:hover { background: rgba(11, 27, 58, 0.2); }
+.toolbar-chips { margin-bottom: 0; flex: 1 1 auto; }
+.result-count { margin-left: auto; font-size: 13px; white-space: nowrap; }
+
+/* Table polish */
+.grid-wrap { --ag-row-hover-color: rgba(31, 79, 184, 0.06); --ag-header-font-weight: 600; --ag-font-size: 13.5px; }
+.grid-wrap .ag-header-cell-text { overflow-wrap: normal !important; word-break: keep-all !important; hyphens: none; text-transform: uppercase; letter-spacing: 0.02em; font-size: 11.5px; overflow: visible; text-overflow: clip; }
+.grid-wrap .ag-overlay-no-rows-center { color: var(--muted); font-size: 14px; }
 
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-family: inherit; font-size: 11.5px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+  background: #efe9da; white-space: nowrap; }
+td { font-size: 13.5px; }
+tbody tr:hover { background: rgba(31, 79, 184, 0.06); }
+tbody tr:last-child td { border-bottom: 0; }
 
 /* Generic tag (used for small secondary states): dot + sentence-case text. */
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 0; margin-left: 4px; background: none; font-size: 12.5px; font-weight: 500; white-space: nowrap; line-height: 1.3; color: var(--ink); }
@@ -194,7 +221,7 @@ blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--bran
 /* Small screens: sidebar becomes a top bar, content uses the full width. */
 @media (max-width: 800px) {
   .shell { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; }
+  .sidebar { position: static; height: auto; overflow: visible; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; }
   .brand { margin-bottom: 0; }
   .sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
   .sidebar nav a { padding: 6px 10px; }
@@ -263,3 +290,32 @@ blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--bran
 .brand-mark { flex: none; }
 
 .ag-cell .badge { margin-left: 0; vertical-align: middle; }
+
+/* Controls: consistent fields and keyboard focus everywhere */
+input, select, textarea { font: inherit; color: var(--text); }
+.form input, .form select, .form textarea { background: #fff; transition: border-color .15s, box-shadow .15s; }
+.form input:focus, .form select:focus, .form textarea:focus,
+dialog.modal input:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(31, 79, 184, 0.15); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+.card .row + .row, .card p + .row { margin-top: 10px; }
+.card > h2 + p { margin-top: -4px; }
+
+/* Approvals */
+.approval { border-left: 3px solid var(--amber); }
+.approval-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.approval-head h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; margin: 0 0 2px; }
+.approval-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; color: var(--muted); }
+.approval .facts { grid-template-columns: 150px 1fr; padding-top: 12px; border-top: 1px solid var(--line); }
+.approval .facts dd { line-height: 1.5; }
+.empty { display: flex; flex-direction: column; gap: 2px; padding: 22px 18px; }
+
+/* Earned autonomy */
+.rule { display: flex; justify-content: space-between; align-items: center; gap: 24px; border-left: 3px solid var(--line); }
+.rule.auto { border-left-color: var(--green); }
+.rule.ask { border-left-color: var(--amber); }
+.rule h3 { font-family: var(--serif); font-size: 17px; font-weight: 500; margin: 0 0 4px; }
+.rule p { margin: 0 0 10px; max-width: 62ch; line-height: 1.5; }
+.streak { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.streak b { font-family: var(--mono); font-weight: 500; color: var(--text); }
+.rule > button { flex: none; }
+@media (max-width: 700px) { .rule { flex-direction: column; align-items: flex-start; } }

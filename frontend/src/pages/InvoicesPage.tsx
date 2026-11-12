@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import { themeQuartz, type ColDef, type GridApi, type ICellRendererParams } from 'ag-grid-community'
-import { get, money, post, type Dashboard, type InvoiceView } from '../api'
+import { get, label, money, post, type Dashboard, type InvoiceView } from '../api'
 import { Badge } from '../components/Badge'
+import { TableToolbar } from '../components/TableToolbar'
 
 // Tighter cells so all columns fit the page without a horizontal scrollbar.
 // Columns hidden as the grid gets narrower, least important first.
 const HIDE_BELOW: [number, string[]][] = [
-  [1000, ['purchaseOrder', 'daysOverdue']],
-  [800, ['paypal', 'paid']],
-  [600, ['dueDate', 'amount']],
-  [480, ['status']],
-  [400, ['outstanding']],
+  [1340, ['purchaseOrder']],
+  [1260, ['customerEmail']],
+  [1130, ['daysOverdue']],
+  [1035, ['paid']],
+  [945, ['paypal']],
+  [820, ['dueDate']],
+  [715, ['amount']],
+  [600, ['status']],
 ]
 
 function fitColumns(api: GridApi) {
@@ -30,8 +34,8 @@ export default function InvoicesPage() {
   const [paypalEnabled, setPaypalEnabled] = useState(false)
   const [message, setMessage] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const gridRef = useRef<AgGridReact<InvoiceView>>(null)
-  const [emailFilter, setEmailFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [formError, setFormError] = useState('')
   const [form, setForm] = useState({ invoiceNumber: '', customerName: '', customerEmail: '', amount: '', paidAmount: '', dueDate: '', purchaseOrder: '' })
 
@@ -40,6 +44,19 @@ export default function InvoicesPage() {
     get<Dashboard>('/api/dashboard').then((d) => setPaypalEnabled(d.paypalEnabled)).catch(() => {})
   }, [])
   useEffect(load, [load])
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const r of rows) counts[r.status] = (counts[r.status] ?? 0) + 1
+    return counts
+  }, [rows])
+
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return rows.filter((r) =>
+      (statusFilter === 'ALL' || r.status === statusFilter)
+      && (!q || [r.invoiceNumber, r.customer, r.customerEmail, r.purchaseOrder, r.status].some((v) => (v ?? '').toLowerCase().includes(q))))
+  }, [rows, search, statusFilter])
 
   const call = useCallback(async (path: string, done: string) => {
     setMessage('')
@@ -85,18 +102,18 @@ export default function InvoicesPage() {
   }
 
   const columns = useMemo<ColDef<InvoiceView>[]>(() => [
-    { field: 'invoiceNumber', headerName: 'Invoice', flex: 85, minWidth: 70 },
-    { field: 'customer', flex: 115, minWidth: 80 },
-    { field: 'customerEmail', headerName: 'Email', flex: 1 },
-    { field: 'amount', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 70 },
-    { field: 'paid', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 70 },
-    { field: 'outstanding', valueFormatter: (p) => money(p.value), flex: 100, minWidth: 85, sort: 'desc' },
-    { field: 'dueDate', headerName: 'Due', flex: 115, minWidth: 95 },
-    { field: 'daysOverdue', headerName: 'Days late', flex: 80, minWidth: 60 },
-    { field: 'status', flex: 100, minWidth: 150, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
-    { field: 'purchaseOrder', headerName: 'PO', flex: 45, minWidth: 55 },
+    { field: 'invoiceNumber', headerName: 'Invoice', flex: 85, minWidth: 105 },
+    { field: 'customer', flex: 115, minWidth: 120 },
+    { field: 'customerEmail', headerName: 'Email', flex: 130, minWidth: 130 },
+    { field: 'amount', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 105 },
+    { field: 'paid', valueFormatter: (p) => money(p.value), flex: 85, minWidth: 90 },
+    { field: 'outstanding', valueFormatter: (p) => money(p.value), flex: 100, minWidth: 155, sort: 'desc' },
+    { field: 'dueDate', headerName: 'Due', flex: 110, minWidth: 105 },
+    { field: 'daysOverdue', headerName: 'Days late', flex: 80, minWidth: 95 },
+    { field: 'status', flex: 100, minWidth: 125, cellRenderer: (p: ICellRendererParams<InvoiceView>) => <Badge value={p.value} /> },
+    { field: 'purchaseOrder', headerName: 'PO', flex: 45, minWidth: 80 },
     {
-      colId: 'paypal', headerName: 'PayPal', flex: 115, minWidth: 110, filter: false,
+      colId: 'paypal', headerName: 'PayPal', flex: 115, minWidth: 125, filter: false,
       cellRenderer: (p: ICellRendererParams<InvoiceView>) => {
         const i = p.data!
         if (i.paypalInvoiceId) {
@@ -113,7 +130,7 @@ export default function InvoicesPage() {
       },
     },
     {
-      colId: 'link', headerName: 'Customer link', flex: 100, minWidth: 80, filter: false,
+      colId: 'link', headerName: 'Customer link', flex: 100, minWidth: 105, filter: false,
       cellRenderer: (p: ICellRendererParams<InvoiceView>) =>
         <a href={p.data!.fixAndPayLink} target="_blank" rel="noreferrer">Fix &amp; Pay</a>,
     },
@@ -165,20 +182,21 @@ export default function InvoicesPage() {
           </div>
         </div>
       </dialog>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <input placeholder="Filter by customer email…" value={emailFilter} style={{ minWidth: 260 }}
-               onChange={(e) => {
-                 setEmailFilter(e.target.value)
-                 gridRef.current?.api.setGridOption('quickFilterText', e.target.value)
-               }} />
-      </div>
+      <TableToolbar
+        search={search} onSearch={setSearch} placeholder="Search invoice, customer, email or PO…"
+        filter={statusFilter} onFilter={setStatusFilter} shown={shown.length} total={rows.length} noun="invoices"
+        options={[
+          { value: 'ALL', label: 'All', count: rows.length },
+          ...['OVERDUE', 'SENT', 'PARTIALLY_PAID', 'PAID'].map((v) => ({ value: v, label: label(v), count: statusCounts[v] ?? 0 })),
+        ]} />
       <div className="card grid-wrap">
         <AgGridReact<InvoiceView>
           theme={compactTheme}
-          rowData={rows}
+          rowData={shown}
           columnDefs={columns}
           domLayout="autoHeight"
-          defaultColDef={{ filter: true, floatingFilter: true, sortable: true, resizable: true }}
+          defaultColDef={{ filter: true, sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true }}
+          overlayNoRowsTemplate="<span>No invoices match your search.</span>"
           onGridReady={(e) => fitColumns(e.api)}
           onGridSizeChanged={(e) => fitColumns(e.api)}
           onFirstDataRendered={(e) => fitColumns(e.api)}
