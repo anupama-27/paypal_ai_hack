@@ -97,14 +97,15 @@ export default function TimelinePage() {
       <header className="page-header">
         <div>
           <h1>Timeline</h1>
-          <p className="muted">
-            <span className="legend legend-blue">Invoice due</span>
-            <span className="legend legend-green">Promised payment</span>
-            <span className="legend legend-orange">Agent follow-up</span>
-          </p>
+          <p className="muted">Upcoming invoice due dates, promised payments and agent follow-ups on one calendar.</p>
         </div>
       </header>
       {error && <div className="alert error">{error}</div>}
+      <div className="legend-group" aria-label="Legend">
+        <span className="legend legend-blue">Invoice due</span>
+        <span className="legend legend-green">Promised payment</span>
+        <span className="legend legend-orange">Agent follow-up</span>
+      </div>
       <div className="card timeline-wrap" ref={host} />
     </div>
   )

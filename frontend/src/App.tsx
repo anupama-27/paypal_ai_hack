@@ -41,18 +41,23 @@ function Shell({ user }: { user: AuthUser | null }) {
           CashFlow <span>AI</span>
         </div>
         <nav>
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/cases">Cases</NavLink>
-          <NavLink to="/approvals">Approvals</NavLink>
-          <NavLink to="/invoices">Invoices</NavLink>
-          <NavLink to="/timeline">Timeline</NavLink>
-          <NavLink to="/autonomy">Autonomy</NavLink>
-          <NavLink to="/demo">Demo controls</NavLink>
+          <div className="nav-label">Workspace</div>
+          <NavLink to="/" end><Icon d={ICONS.dashboard} />Dashboard</NavLink>
+          <NavLink to="/cases"><Icon d={ICONS.cases} />Cases</NavLink>
+          <NavLink to="/approvals"><Icon d={ICONS.approvals} />Approvals</NavLink>
+          <NavLink to="/invoices"><Icon d={ICONS.invoices} />Invoices</NavLink>
+          <NavLink to="/timeline"><Icon d={ICONS.timeline} />Timeline</NavLink>
+          <div className="nav-label">Agent</div>
+          <NavLink to="/autonomy"><Icon d={ICONS.autonomy} />Autonomy</NavLink>
+          <NavLink to="/demo"><Icon d={ICONS.demo} />Demo controls</NavLink>
         </nav>
         <StatusFooter key={location.pathname} />
         {user && (
-          <div className="sidebar-footer">
-            <div>{user.email}</div>
+          <div className="sidebar-footer user">
+            <div className="user-row">
+              <span className="avatar">{user.email.charAt(0).toUpperCase()}</span>
+              <span className="user-email" title={user.email}>{user.email}</span>
+            </div>
             <button onClick={() => { clearToken(); window.location.assign('/') }}>Sign out</button>
           </div>
         )}
@@ -81,9 +86,28 @@ function StatusFooter() {
   if (!d) return <div className="sidebar-footer muted">Backend not reachable</div>
   return (
     <div className="sidebar-footer">
-      <div>Business date: <b>{d.today}</b></div>
-      <div>Agent: <b>{d.agentBrain}</b></div>
-      <div>PayPal: <b>{d.paypalEnabled ? 'sandbox' : 'simulated'}</b></div>
+      <div className="status-row"><span>Business date</span><b>{d.today}</b></div>
+      <div className="status-row"><span>Agent</span><b>{d.agentBrain}</b></div>
+      <div className="status-row"><span>PayPal</span><b>{d.paypalEnabled ? 'sandbox' : 'simulated'}</b></div>
     </div>
+  )
+}
+
+const ICONS = {
+  dashboard: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
+  cases: 'M4 7h16M4 12h16M4 17h10',
+  approvals: 'M5 12l4.5 4.5L19 7',
+  invoices: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7',
+  timeline: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  autonomy: 'M4 8h10M18 8h2M4 16h2M10 16h10M14 6v4M6 14v4',
+  demo: 'M8 5l11 7-11 7z',
+}
+
+function Icon({ d }: { d: string }) {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
   )
 }

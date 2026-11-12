@@ -47,7 +47,10 @@ export default function CasesPage() {
   return (
     <div>
       <header className="page-header">
-        <h1>Cases</h1>
+        <div>
+          <h1>Cases</h1>
+          <p className="muted">Every invoice problem the agent has detected, with its diagnosed cause and where it stands.</p>
+        </div>
       </header>
       <TableToolbar
         search={search} onSearch={setSearch} placeholder="Search case, invoice, customer or cause…"
